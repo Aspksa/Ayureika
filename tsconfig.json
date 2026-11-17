@@ -8,7 +8,7 @@
     ],
     "strict": true,
     "skipLibCheck": true,
-    "outDir": "frontend",
+    "outDir": "frontend/build",
     "rootDir": "frontend/src"
   },
   "include": [
