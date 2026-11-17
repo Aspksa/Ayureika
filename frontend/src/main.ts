@@ -389,7 +389,7 @@ settingsSearch.oninput=()=>{
   const nav=settingsLinks.querySelector<HTMLButtonElement>('[data-section="'+sec.id+'"]');
   if(nav)nav.hidden=!matches.some(x=>x.id===sec.id);
  }
- if(matches.length&&!matches.some(x=>x.id===activeSettingsSection))selectSettingsSection(matches[0]!.id);
+ if(matches.length)selectSettingsSection(matches.some(x=>x.id===activeSettingsSection)?activeSettingsSection:matches[0]!.id);
  if(!matches.length){for(const card of settingsCards.values())card.hidden=true;}
 };
 async function showSettings(){try{const r=await fetch('/api/settings');if(r.ok){remoteSettings=await r.json() as RemoteSettings;rebuildSettings();settingsSearch.dispatchEvent(new Event("input"));}}catch{}settingsPage.hidden=false;panel.hidden=true;settingsSearch.focus();}
