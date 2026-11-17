@@ -193,7 +193,11 @@ def main():
         tsc = ROOT / "node_modules" / "typescript" / "bin" / "tsc"
         if not tsc.is_file():
             print("Установка TypeScript...")
-            run([npm, "install", "--no-audit", "--no-fund"])
+            npm_cli = Path(node).with_name("node_modules") / "npm" / "bin" / "npm-cli.js"
+            if npm_cli.is_file():
+                run([node, str(npm_cli), "install", "--no-audit", "--no-fund"])
+            else:
+                run([npm, "install", "--no-audit", "--no-fund"])
         run([node, str(tsc), "--project", "tsconfig.json"])
         api, api_port, body = start_with_retry(
             [sys.executable, str(ROOT / "backend" / "main.py")], "/api/status", "api.log")
