@@ -34,6 +34,7 @@ async function handler(req,res){
    }
    if(pathname==="/api/memory"&&req.method==="GET")return json(res,200,{items:memory.list()});
    if(pathname==="/api/memory"&&req.method==="POST"){const c=load();if(!c.memoryEnabled)return json(res,403,{error:"Память отключена"});const input=await body(req);return json(res,200,memory.remember(input.content));}
+   if(pathname==="/api/memory/relevant"&&req.method==="POST"){const c=load();if(!c.memoryEnabled)return json(res,403,{error:"Память отключена"});const input=await body(req);return json(res,200,{items:memory.relevant(input.query)});}
    if(pathname==="/api/memory/search"&&req.method==="POST"){const c=load();if(!c.memoryEnabled)return json(res,403,{error:"Память отключена"});const input=await body(req);return json(res,200,{items:memory.search(input.query)});}
    if(pathname==="/api/memory/delete"&&req.method==="POST"){const input=await body(req);if(input.confirm!==true)return json(res,403,{error:"Требуется подтверждение"});return json(res,200,{deleted:memory.forget(input.id)});}
    if(pathname==="/api/tools"&&req.method==="GET")return json(res,200,{available:["calculator","clock","memory_search"],audit:memory.logs()});
@@ -45,11 +46,13 @@ async function handler(req,res){
    }
    if(pathname==="/api/health"&&req.method==="GET"){const c=load();return json(res,200,{server:true,endpointConfigured:Boolean(c.endpoint),keyConfigured:Boolean(auth(c)),modelConfigured:Boolean(c.model)});}
    if(pathname==="/api/chat"&&req.method==="POST"){
-    const c=load();if(!c.endpoint||!auth(c)||!c.model)return json(res,503,{error:"Настройте адрес API, ключ и модель в настройках."});
-    const input=await body(req);if(typeof input.message!=="string"||input.message.length>30000)return json(res,400,{error:"Недопустимое сообщение"});
+    const c=load();const input=await body(req);if(typeof input.message!=="string"||input.message.length>30000)return json(res,400,{error:"Недопустимое сообщение"});
+    const explicitFact=c.memoryEnabled?memory.extractExplicit(input.message):null;
+    if(explicitFact){const saved=memory.remember(explicitFact);return json(res,200,{reply:"Запомнила: "+saved.content,memorySaved:true});}
+    if(!c.endpoint||!auth(c)||!c.model)return json(res,503,{error:"Настройте адрес API, ключ и модель в настройках."});
     const messages=[];if(c.instructions)messages.push({role:"system",content:c.instructions});
     if(c.memoryEnabled&&Array.isArray(input.history))for(const m of input.history.slice(-20)){if(["user","assistant"].includes(m.role)&&typeof m.content==="string")messages.push({role:m.role,content:m.content.slice(0,30000)});}
-    if(c.memoryEnabled){const remembered=memory.search(input.message.slice(0,150),5);if(remembered.length)messages.unshift({role:"system",content:"Подтверждённые записи памяти пользователя:\\n"+remembered.map(x=>"- "+x.content).join("\\n")});}
+    if(c.memoryEnabled){const remembered=memory.relevant(input.message.slice(0,500),5);if(remembered.length)messages.unshift({role:"system",content:"Подтверждённые записи памяти пользователя:\\n"+remembered.map(x=>"- "+x.content).join("\\n")});}
     if(messages.at(-1)?.role!=="user"||messages.at(-1)?.content!==input.message)messages.push({role:"user",content:input.message});
     let upstream;let chosen=typeof input.model==="string"&&input.model?input.model:c.model;
     const payload=model=>({model,messages,stream:false});

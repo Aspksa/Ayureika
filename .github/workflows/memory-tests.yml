@@ -1,0 +1,15 @@
+name: SQLite memory tests
+on:
+  push:
+    branches: [main, feat/memory-retrieval-chat-tools]
+  pull_request:
+    branches: [main]
+jobs:
+  memory:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm test
