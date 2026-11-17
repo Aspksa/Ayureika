@@ -42,6 +42,11 @@ async function run(){
  assert.equal(await evaluate("document.querySelectorAll('.ay-avatar-controls input[type=range]').length"),2);
  assert.equal(await evaluate("document.querySelectorAll('.ay-avatar-settings').length"),0);
  assert.equal(await evaluate("document.querySelectorAll('.ay-settings-link').length"),12);
+ await evaluate("document.querySelector('.ay-settings-link[data-section=\\\"conn\\\"]').click()");
+ assert.ok(await evaluate("document.querySelector('.ay-settings-card:not([hidden])').textContent.includes('Проверить ответ модели')"));
+ await evaluate("document.querySelector('.ay-settings-link[data-section=\\\"model\\\"]').click()");
+ assert.ok(await evaluate("document.querySelector('.ay-settings-card:not([hidden])').textContent.includes('Получить список моделей')"));
+
  for(const section of ["conn","model","persona","memory","tools","quick","look","avatar","chat","data","diagnostics","about"]){
   await evaluate("document.querySelector('.ay-settings-link[data-section=\\\""+section+"\\\"]').click()");
   assert.equal(await evaluate("document.querySelector('.ay-settings-card:not([hidden])').id"),"ay-settings-"+section);
