@@ -104,7 +104,7 @@ form.onsubmit = async e => {
   persist();renderList();paint();input.value="";try{localStorage.removeItem(DRAFT_KEY);}catch{}showSources([]);updateContext();
   const controller = new AbortController(); active=controller; avatar.classList.add("busy"); busyBadge.hidden=false; send.disabled=true;stop.hidden=false;status.textContent="Ожидание ответа…";
   try {
-    const streaming=remoteSettings.streamEnabled&&!remoteSettings.toolsEnabled&&!/^запомни(?:\\s|:)/iu.test(message);const response=await fetch(streaming?"/api/chat/stream":"/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message,history:target.messages.slice(-Math.max(1,remoteSettings.historyLimit)),model:modelSelect.value}),signal:controller.signal});
+    const streaming=remoteSettings.streamEnabled&&!remoteSettings.toolsEnabled&&!/^запомни(?:\\s|:)/iu.test(message);const response=await fetch(streaming?"/api/chat/stream":"/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message,history:target.messages.slice(-Math.max(1,remoteSettings.historyLimit)),model:selectedModel||remoteSettings.model}),signal:controller.signal});
     if(!response.ok) { let err="Ошибка сервера: "+response.status; try { const body=await response.json() as {error?:string}; if(body.error)err=body.error; } catch {} throw new Error(err); }
     const type=response.headers.get("content-type")||"";
     if(type.includes("text/event-stream") || type.includes("application/x-ndjson") || type.includes("text/plain")) {
@@ -135,13 +135,15 @@ form.onsubmit = async e => {
 input.addEventListener("input",()=>{updateContext();try{localStorage.setItem(DRAFT_KEY,input.value);}catch{}});
 input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();form.requestSubmit();}});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!panel.hidden)closeChat();});
-const selectedModel=localStorage.getItem(MODEL_KEY)||"";
+let selectedModel="";
 let models:string[] = selectedModel?[selectedModel]:[];
 function renderModels() { const q=modelSearch.value.toLowerCase();modelSelect.replaceChildren();for(const name of models.filter(m=>m.toLowerCase().includes(q))){const opt=document.createElement("option");opt.value=name;opt.textContent=name;modelSelect.append(opt);} if(models.includes(selectedModel))modelSelect.value=selectedModel; }
 modelSearch.oninput=renderModels;
-modelSelect.onchange=()=>{try{localStorage.setItem(MODEL_KEY,modelSelect.value);}catch{}};
+modelSelect.onchange=async()=>{const previous=selectedModel;try{await saveRemote({model:modelSelect.value});selectedModel=modelSelect.value;try{localStorage.setItem(MODEL_KEY,selectedModel);}catch{}}catch(e){selectedModel=previous;renderModels();status.textContent="Не удалось выбрать модель: "+String(e);}};
 renderModels();
-fetch("/api/cloud/models").then(async r=>{if(!r.ok)return;const data=await r.json() as {models?:string[]};if(Array.isArray(data.models)){models=[...new Set([...models,...data.models.filter(m=>typeof m==="string")])];renderModels();}}).catch(()=>{});
+async function refreshCloudModels(){const r=await fetch("/api/cloud/models");if(!r.ok)throw Error("Список моделей недоступен");const data=await r.json() as {models?:string[];available?:string[];manual?:string[];warning?:string};models=[...new Set([...(data.available||data.models||[]),...(data.manual||[]),selectedModel].filter(Boolean))];renderModels();return data;}
+async function syncCloudSettings(){const r=await fetch("/api/settings");if(!r.ok)throw Error("Настройки Cloud.ru недоступны");remoteSettings=await r.json() as RemoteSettings;selectedModel=remoteSettings.model;models=[...new Set([selectedModel,...models].filter(Boolean))];renderModels();}
+void syncCloudSettings().then(refreshCloudModels).catch(e=>{status.textContent=String(e);});
 const FRAME_KEY="ayureika:chat:frame";
 let full=false;
 function frameSave(){if(full)return;try{localStorage.setItem(FRAME_KEY,JSON.stringify({left:panel.style.left,top:panel.style.top,width:panel.style.width,height:panel.style.height}));}catch{}}
@@ -219,7 +221,7 @@ applyUi();
 async function saveRemote(patch:Partial<RemoteSettings>&{apiKey?:string;clearApiKey?:boolean}){
  const response=await fetch("/api/settings",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(patch)});
  const data=await response.json() as RemoteSettings&{error?:string};if(!response.ok)throw Error(data.error||"Не удалось сохранить");
- remoteSettings=data;return data;
+ remoteSettings=data;if(Object.hasOwn(patch,"model")){selectedModel=data.model;models=[...new Set([data.model,...models].filter(Boolean))];renderModels();}return data;
 }
 function textField(label:string,value:string,onSave:(value:string)=>Promise<unknown>,secret=false){
  const wrap=document.createElement("label");wrap.className="ay-settings-field";
@@ -265,13 +267,16 @@ function addSettingsCard(sec:SettingsSection){
   const check=button("Проверить подключение");const status=document.createElement("small");status.setAttribute("role","status");
   check.onclick=async()=>{try{status.textContent="Проверка доступа к Cloud.ru…";const r=await fetch("/api/cloud/check");const h=await r.json() as {ok:boolean;error?:string;models?:number;modelAvailable?:boolean};status.textContent=h.ok?"Cloud.ru доступен · Моделей: "+h.models+(h.modelAvailable?"":" · Выбранная модель не найдена"):"Ошибка подключения: "+(h.error||"неизвестная ошибка");}catch(e){status.textContent=String(e);}};
   body.append(check,status);
+  const test=button("Проверить ответ модели (расходует токены)");const testStatus=document.createElement("small");testStatus.setAttribute("role","status");
+  test.onclick=async()=>{test.disabled=true;testStatus.textContent="Отправка тестового сообщения Cloud.ru…";try{const r=await fetch("/api/cloud/test",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});const d=await r.json() as {ok:boolean;error?:string;reply?:string;model?:string};testStatus.textContent=d.ok?"Модель "+d.model+" ответила: "+d.reply:"Ошибка теста: "+(d.error||"неизвестная ошибка");}catch(e){testStatus.textContent=String(e);}finally{test.disabled=false;}};
+  body.append(test,testStatus);
  }else if(sec.id==="model"){
   body.append(textField("Основная модель",remoteSettings.model,async v=>{await saveRemote({model:v});models=[...new Set([...models,v].filter(Boolean))];renderModels();}));
   body.append(textField("Запасная модель",remoteSettings.fallbackModel,v=>saveRemote({fallbackModel:v})));
   const capabilitiesButton=button("Проверить возможности по метаданным Cloud.ru");const capabilitiesOutput=document.createElement("div");capabilitiesOutput.className="ay-settings-capabilities";
   capabilitiesButton.onclick=async()=>{try{const r=await fetch("/api/cloud/models");if(!r.ok)throw Error("Список моделей недоступен");const d=await r.json() as {capabilities?:{id:string;streaming:boolean|null;tools:boolean|null;embeddings:boolean|null}[];warning?:string};const flags=(v:boolean|null)=>v===true?"Да":v===false?"Нет":"Не указано";capabilitiesOutput.replaceChildren(...(d.capabilities||[]).map(m=>settingsRow(m.id,"Поток: "+flags(m.streaming)+" · Инструменты: "+flags(m.tools)+" · Embeddings: "+flags(m.embeddings))));if(!d.capabilities?.length)capabilitiesOutput.textContent=d.warning||"Cloud.ru не предоставил метаданные возможностей. Неизвестное не означает отсутствие поддержки.";}catch(e){capabilitiesOutput.textContent=String(e);}};body.append(capabilitiesButton,capabilitiesOutput);
   const refresh=button("Получить список моделей");const list=document.createElement("div");list.className="ay-settings-model-list";
-  refresh.onclick=async()=>{try{const r=await fetch("/api/cloud/models");const d=await r.json() as {models:string[];warning?:string};models=[...new Set(d.models)];renderModels();list.replaceChildren(...(d.warning?[settingsRow("Предупреждение",d.warning)]:[]),...models.map(m=>{const b=button(m);b.onclick=()=>{void saveRemote({model:m}).then(()=>{modelSelect.value=m;});};return b;}));}catch(e){list.textContent=String(e);}};
+  refresh.onclick=async()=>{try{const r=await fetch("/api/cloud/models");const d=await refreshCloudModels();list.replaceChildren(...(d.warning?[settingsRow("Предупреждение",d.warning)]:[]),...((d.available||[]).map(m=>{const b=button("Cloud.ru · "+m);b.onclick=()=>{void saveRemote({model:m}).catch(e=>{list.textContent=String(e);});};return b;})),...((d.manual||[]).map(m=>{const b=button("Сохранённая вручную · "+m);b.onclick=()=>{void saveRemote({model:m}).catch(e=>{list.textContent=String(e);});};return b;})));}catch(e){list.textContent=String(e);}};
   body.append(refresh,list);
  }else if(sec.id==="persona"){
   const field=document.createElement("textarea");field.rows=6;field.value=remoteSettings.instructions;field.placeholder="Как должна отвечать Ayureika";
@@ -400,7 +405,7 @@ settingsSearch.oninput=()=>{
  if(matches.length)selectSettingsSection(matches.some(x=>x.id===activeSettingsSection)?activeSettingsSection:matches[0]!.id);
  if(!matches.length){for(const card of settingsCards.values())card.hidden=true;settingsEmpty.hidden=false;}else settingsEmpty.hidden=true;
 };
-async function showSettings(){try{const r=await fetch('/api/settings');if(r.ok){remoteSettings=await r.json() as RemoteSettings;rebuildSettings();settingsSearch.dispatchEvent(new Event("input"));}}catch{}settingsPage.hidden=false;panel.hidden=true;settingsSearch.focus();}
+async function showSettings(){try{const r=await fetch('/api/settings');if(r.ok){remoteSettings=await r.json() as RemoteSettings;selectedModel=remoteSettings.model;models=[...new Set([selectedModel,...models].filter(Boolean))];renderModels();rebuildSettings();settingsSearch.dispatchEvent(new Event("input"));}}catch{}settingsPage.hidden=false;panel.hidden=true;settingsSearch.focus();}
 function hideSettings(){settingsPage.hidden=true;settingsSearch.value="";settingsSearch.dispatchEvent(new Event("input"));}
 settingsOpen.onclick=showSettings;settingsExit.onclick=hideSettings;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!settingsPage.hidden)hideSettings();if(e.ctrlKey&&e.key===","){e.preventDefault();showSettings();}});
