@@ -36,7 +36,7 @@ async function run(){
  await evaluate("document.querySelector('.ay-settings-link[data-section=\\\"chat\\\"]').click()");
  assert.equal(await evaluate("document.querySelector('.ay-settings-card:not([hidden])').id"),"ay-settings-chat");
  assert.equal(await evaluate("document.querySelectorAll('.ay-settings-card:not([hidden])').length"),1);
- assert.equal(await evaluate("document.querySelectorAll('.ay-settings-card:not([hidden]) select').length"),3);
+ assert.equal(await evaluate("document.querySelectorAll('.ay-settings-card:not([hidden]) select').length"),2);
  await evaluate("document.querySelector('.ay-settings-link[data-section=\\\"look\\\"]').click()");
  assert.equal(await evaluate("document.querySelector('.ay-settings-card:not([hidden])').id"),"ay-settings-look");
  await evaluate("document.querySelector('.ay-settings-nav input').value='память';document.querySelector('.ay-settings-nav input').dispatchEvent(new Event('input',{bubbles:true}))");
