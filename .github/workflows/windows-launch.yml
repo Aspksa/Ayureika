@@ -33,5 +33,5 @@ jobs:
           $script = Join-Path $target 'Ayureika.bat'
           if (-not (Test-Path -LiteralPath $script)) { throw 'BAT not copied' }
           $env:AYUREIKA_CI_CHECK = '1'
-          & cmd.exe /d /c ('"' + $script + '"')
+          & $script
           if ($LASTEXITCODE -ne 0) { throw "BAT failed: $LASTEXITCODE" }
