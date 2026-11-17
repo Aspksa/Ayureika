@@ -23,6 +23,31 @@ try{for(const row of memory.missingVectors(c.embeddingModel,10)){try{memory.putV
 const vector=await embed(c,query);return memory.semantic(c.embeddingModel,vector,5).filter(x=>x.score>0.25);
 }catch{return memory.relevant(query,5);}}
 function cleanupPending(){for(const [id,entry] of pendingTools)if(entry.expires<Date.now())pendingTools.delete(id);}
+function stageTool(c,model,messages,answer,step){
+ const calls=answer?.choices?.[0]?.message?.tool_calls;
+ if(!Array.isArray(calls)||!calls.length)return null;
+ if(!c.toolsEnabled)throw Error("Инструменты отключены");
+ if(calls.length!==1)throw Error("Поддерживается один инструмент за шаг");
+ if(step>=3)throw Error("Превышен лимит трёх вызовов инструментов за ответ");
+ const call=calls[0],name=call?.function?.name;
+ if(!["calculator","clock","memory_search"].includes(name))throw Error("Инструмент не разрешён");
+ if(typeof call.id!=="string"||!call.id||call.id.length>150)throw Error("Неверный идентификатор вызова");
+ let args;try{args=JSON.parse(call.function.arguments||"{}");}catch{throw Error("Некорректные аргументы инструмента");}
+ if(!args||typeof args!=="object"||Array.isArray(args))throw Error("Некорректные аргументы");
+ if(name!=="clock"&&typeof args.input!=="string")throw Error("Не указан аргумент инструмента");
+ const value=name==="clock"?"":args.input;
+ if(value.length>500)throw Error("Слишком длинный аргумент");
+ cleanupPending();if(pendingTools.size>=100)throw Error("Слишком много ожидающих подтверждений");
+ const id=require("node:crypto").randomUUID();
+ pendingTools.set(id,{name,input:value,expires:Date.now()+120000,model,messages:[...messages,answer.choices[0].message],callId:call.id,step});
+ return {confirmation:{id,name,input:value}};
+}
+async function complete(c,model,messages){
+ const payload={model,messages,stream:false,...(c.toolsEnabled?{tools:toolDefs,tool_choice:"auto"}:{})};
+ let response=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify(payload)});
+ if(!response.ok)throw Error("Провайдер ИИ вернул ошибку "+response.status);
+ return response.json();
+}
 async function handler(req,res){
  let pathname;try{pathname=decodeURIComponent(new URL(req.url,"http://localhost").pathname);}catch{return json(res,400,{error:"Некорректный адрес"});}
  if(pathname.startsWith("/api/")){
@@ -48,7 +73,25 @@ async function handler(req,res){
    if(pathname==="/api/memory/delete"&&req.method==="POST"){const input=await body(req);if(input.confirm!==true)return json(res,403,{error:"Требуется подтверждение"});return json(res,200,{deleted:memory.forget(input.id)});}
    if(pathname==="/api/tools"&&req.method==="GET")return json(res,200,{available:["calculator","clock","memory_search"],audit:memory.logs()});
    if(pathname==="/api/tools/run"&&req.method==="POST"){const c=load();if(!c.toolsEnabled)return json(res,403,{error:"Инструменты отключены"});const input=await body(req);return json(res,200,memory.execute(input.name,input.input,input.confirm===true));}
-   if(pathname==="/api/tools/approve"&&req.method==="POST"){const c=load();const input=await body(req);cleanupPending();const pending=pendingTools.get(input.id);if(!pending)return json(res,404,{error:"Запрос инструмента истёк"});pendingTools.delete(input.id);if(input.approve!==true)return json(res,200,{reply:"Выполнение инструмента отменено."});if(!c.toolsEnabled)return json(res,403,{error:"Инструменты отключены"});const result=memory.execute(pending.name,pending.input,true);return json(res,200,{reply:"Инструмент «"+pending.name+"»: "+result.output,toolResult:result});}
+   if(pathname==="/api/tools/approve"&&req.method==="POST"){
+    const c=load(),input=await body(req);cleanupPending();
+    if(typeof input.id!=="string")return json(res,400,{error:"Неверный запрос"});
+    const pending=pendingTools.get(input.id);
+    if(!pending)return json(res,404,{error:"Запрос инструмента истёк"});
+    pendingTools.delete(input.id);
+    if(input.approve!==true)return json(res,200,{reply:"Выполнение инструмента отменено."});
+    if(!c.toolsEnabled)return json(res,403,{error:"Инструменты отключены"});
+    const result=memory.execute(pending.name,pending.input,true);
+    const messages=[...pending.messages,{role:"tool",tool_call_id:pending.callId,content:result.output}];
+    try{
+     const response=await complete(c,pending.model,messages);
+     const staged=stageTool(c,pending.model,messages,response,pending.step+1);
+     if(staged)return json(res,200,{...staged,toolResult:result});
+     const reply=response.choices?.[0]?.message?.content;
+     if(typeof reply!=="string")return json(res,502,{error:"Модель не вернула текст после инструмента"});
+     return json(res,200,{reply,model:pending.model,toolResult:result});
+    }catch(e){return json(res,502,{error:"Инструмент выполнен, но продолжение ответа не удалось: "+(e instanceof Error?e.message:"ошибка"),toolResult:result});}
+   }
    if(pathname==="/api/cloud/models"&&req.method==="GET"){
     const c=load();let models=(process.env.CLOUD_RU_MODELS||"").split(",").map(s=>s.trim()).filter(Boolean);
     if(c.endpoint&&auth(c)){try{const upstream=await remote(c,"/models");if(upstream.ok){const d=await upstream.json();if(Array.isArray(d.data))models=[...new Set([...models,...d.data.map(x=>x.id).filter(x=>typeof x==="string")])];}}catch{}}
@@ -69,8 +112,9 @@ async function handler(req,res){
     upstream=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify(payload(chosen))});
     if(!upstream.ok&&[429,500,502,503,504].includes(upstream.status)&&c.fallbackModel&&chosen!==c.fallbackModel){chosen=c.fallbackModel;upstream=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify(payload(chosen))});}
     if(!upstream.ok)return json(res,502,{error:"Провайдер ИИ вернул ошибку "+upstream.status});
-    const response=await upstream.json();const calls=response.choices?.[0]?.message?.tool_calls;
-    if(c.toolsEnabled&&Array.isArray(calls)&&calls.length){const call=calls[0];if(calls.length>1)return json(res,400,{error:"Модель запросила несколько инструментов; поддерживается один вызов за раз"});const name=call.function?.name;if(!["calculator","clock","memory_search"].includes(name))return json(res,400,{error:"Инструмент модели не разрешён"});let args;try{args=JSON.parse(call.function.arguments||"{}");}catch{return json(res,400,{error:"Некорректные аргументы инструмента"});}if(typeof args.input!=="string"&&name!=="clock")return json(res,400,{error:"Нет аргумента инструмента"});cleanupPending();if(pendingTools.size>100)return json(res,429,{error:"Слишком много ожидающих подтверждений"});const id=require("node:crypto").randomUUID();pendingTools.set(id,{name,input:String(args.input||""),expires:Date.now()+120000});return json(res,200,{confirmation:{id,name,input:String(args.input||"")}});}
+    const response=await upstream.json();
+    const staged=stageTool(c,chosen,messages,response,0);
+    if(staged)return json(res,200,staged);
     const reply=response.choices?.[0]?.message?.content;
     if(typeof reply!=="string")return json(res,502,{error:"Неожиданный ответ модели"});
     return json(res,200,{reply,model:chosen});
