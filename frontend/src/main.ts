@@ -47,7 +47,7 @@ const stop = button("Стоп"); stop.hidden = true;
 const status = document.createElement("p"); status.className = "ay-status"; status.setAttribute("role","status");
 form.append(input,send,stop); main.append(head,thread,form,status); panel.append(side,main); document.body.append(avatar,panel);
 function updateContext() {
-  const chars = conv().messages.slice(-20).reduce((n,m)=>n+m.content.length,0)+input.value.length;
+  const chars = conv().messages.slice(-Math.max(1,remoteSettings.historyLimit)).reduce((n,m)=>n+m.content.length,0)+input.value.length;
   context.textContent = "≈ " + Math.ceil(chars/4) + " ток.";
 }
 function renderMarkdown(source: string): DocumentFragment {
@@ -101,21 +101,21 @@ form.onsubmit = async e => {
   persist();renderList();paint();input.value="";updateContext();
   const controller = new AbortController(); active=controller; avatar.classList.add("busy"); busyBadge.hidden=false; send.disabled=true;stop.hidden=false;status.textContent="Ожидание ответа…";
   try {
-    const streaming=!remoteSettings.toolsEnabled&&!/^запомни(?:\\s|:)/iu.test(message);const response=await fetch(streaming?"/api/chat/stream":"/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message,history:target.messages.slice(-20),model:modelSelect.value}),signal:controller.signal});
+    const streaming=remoteSettings.streamEnabled&&!remoteSettings.toolsEnabled&&!/^запомни(?:\\s|:)/iu.test(message);const response=await fetch(streaming?"/api/chat/stream":"/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message,history:target.messages.slice(-Math.max(1,remoteSettings.historyLimit)),model:modelSelect.value}),signal:controller.signal});
     if(!response.ok) { let err="Ошибка сервера: "+response.status; try { const body=await response.json() as {error?:string}; if(body.error)err=body.error; } catch {} throw new Error(err); }
     const type=response.headers.get("content-type")||"";
     if(type.includes("text/event-stream") || type.includes("application/x-ndjson") || type.includes("text/plain")) {
       if(!response.body)throw new Error("Сервер не поддерживает поток");
       const reply:Message={role:"assistant",content:""}; target.messages.push(reply);
-      const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="";
+      const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="";let streamFailure="";
       while(true) { const {done,value}=await reader.read(); if(done)break; buffer+=decoder.decode(value,{stream:true});
-        if(type.includes("text/event-stream")) { const parts=buffer.split("\n\n");buffer=parts.pop()||"";for(const part of parts){for(const line of part.split("\n"))if(line.startsWith("data:")){const raw=line.slice(5).trim();if(raw==="[DONE]")continue;try{const obj=JSON.parse(raw) as {delta?:string;content?:string;error?:string};if(obj.error){status.textContent=obj.error;continue;}reply.content+=obj.delta??obj.content??"";}catch{reply.content+=raw;}}} }
+        if(type.includes("text/event-stream")) { const parts=buffer.split("\n\n");buffer=parts.pop()||"";for(const part of parts){for(const line of part.split("\n"))if(line.startsWith("data:")){const raw=line.slice(5).trim();if(raw==="[DONE]")continue;try{const obj=JSON.parse(raw) as {delta?:string;content?:string;error?:string};if(obj.error){streamFailure=obj.error;continue;}reply.content+=obj.delta??obj.content??"";}catch{reply.content+=raw;}}} }
         else if(type.includes("application/x-ndjson")) { const parts=buffer.split("\n");buffer=parts.pop()||"";for(const line of parts){try{const obj=JSON.parse(line) as {delta?:string};reply.content+=obj.delta||"";}catch{}} }
         else { reply.content+=buffer;buffer=""; }
         if(current===target.id)paint();
       }
       if(buffer && type.includes("text/plain"))reply.content+=buffer;
-      if(!reply.content)target.messages.pop();
+      if(!reply.content)target.messages.pop();if(streamFailure)throw Error(streamFailure);
     } else { const data=await response.json() as {reply?:string;error?:string;confirmation?:{id:string;name:string;input:string}};let steps=0;while(data.confirmation&&steps<3){
       const t=data.confirmation;const approved=confirm("Модель запрашивает инструмент «"+t.name+"» с аргументом «"+t.input+"». Разрешить?");
       const check=await fetch("/api/tools/approve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,approve:approved}),signal:controller.signal});
@@ -188,6 +188,7 @@ const settingsSections:SettingsSection[] = [
   {id:"look",title:"Внешний вид",icon:"◉",description:"Тема, цвет и оформление.",items:["Тема интерфейса","Цвет оформления","Скругление карточек","Масштаб интерфейса"]},
   {id:"chat",title:"Чат",icon:"▤",description:"Отображение сообщений и окна чата.",items:["Плотность сообщений","Размер текста","Окно чата"]},
   {id:"data",title:"Данные",icon:"▣",description:"История и сохранённые данные.",items:["История чатов","Резервные копии"]},
+  {id:"diagnostics",title:"Диагностика",icon:"✚",description:"Сервер, Cloud.ru и база SQLite.",items:["Проверка состояния","Ошибки подключения"]},
   {id:"about",title:"О программе",icon:"ⓘ",description:"Информация о проекте.",items:["Ayureika","GitHub"]}
 ];
 const collapsedKey="ayureika:settings:collapsed:v1";
@@ -201,8 +202,8 @@ function settingsRow(label:string,detail:string):HTMLElement{
 }
 const settingsCards=new Map<string,HTMLElement>();
 
-type RemoteSettings={endpoint:string;model:string;fallbackModel:string;instructions:string;memoryEnabled:boolean;toolsEnabled:boolean;quickCommands:{name:string;text:string}[];embeddingModel:string;keyConfigured:boolean};
-let remoteSettings:RemoteSettings={endpoint:"https://foundation-models.api.cloud.ru/v1",model:"",fallbackModel:"",instructions:"",memoryEnabled:true,toolsEnabled:false,quickCommands:[],embeddingModel:"",keyConfigured:false};
+type RemoteSettings={endpoint:string;model:string;fallbackModel:string;instructions:string;memoryEnabled:boolean;toolsEnabled:boolean;quickCommands:{name:string;text:string}[];embeddingModel:string;streamEnabled:boolean;historyLimit:number;allowedTools:string[];keyConfigured:boolean};
+let remoteSettings:RemoteSettings={endpoint:"https://foundation-models.api.cloud.ru/v1",model:"",fallbackModel:"",instructions:"",memoryEnabled:true,toolsEnabled:false,quickCommands:[],embeddingModel:"",streamEnabled:true,historyLimit:20,allowedTools:["calculator","clock","memory_search"],keyConfigured:false};
 const uiKey="ayureika:settings:ui:v1";
 type UiPrefs={theme:string;accent:string;radius:string;scale:string;font:string;density:string};
 let ui:UiPrefs={theme:"dark",accent:"#caa65b",radius:"16",scale:"100",font:"14",density:"normal"};
@@ -257,12 +258,13 @@ function addSettingsCard(sec:SettingsSection){
   body.append(settingsRow("Состояние ключа",remoteSettings.keyConfigured?"Ключ настроен":"Ключ не задан"));
   const check=button("Проверить подключение");const status=document.createElement("small");status.setAttribute("role","status");
   check.onclick=async()=>{try{status.textContent="Проверка доступа к Cloud.ru…";const r=await fetch("/api/cloud/check");const h=await r.json() as {ok:boolean;error?:string;models?:number;modelAvailable?:boolean};status.textContent=h.ok?"Cloud.ru доступен · Моделей: "+h.models+(h.modelAvailable?"":" · Выбранная модель не найдена"):"Ошибка подключения: "+(h.error||"неизвестная ошибка");}catch(e){status.textContent=String(e);}};
-  body.append(check,status);
+  const retry=button("Повторить подключение");retry.onclick=()=>check.click();body.append(check,retry,status);
  }else if(sec.id==="model"){
   body.append(textField("Основная модель",remoteSettings.model,async v=>{await saveRemote({model:v});models=[...new Set([...models,v].filter(Boolean))];renderModels();}));
   body.append(textField("Запасная модель",remoteSettings.fallbackModel,v=>saveRemote({fallbackModel:v})));
+  const verify=button("Проверить доступность выбранной модели");const verifyStatus=document.createElement("small");verify.onclick=async()=>{try{const r=await fetch("/api/cloud/check");const d=await r.json() as {ok:boolean;modelAvailable?:boolean;error?:string};verifyStatus.textContent=!d.ok?d.error||"Ошибка":d.modelAvailable?"Основная модель доступна":"Основная модель не найдена в списке Cloud.ru";}catch(e){verifyStatus.textContent=String(e);}};body.append(verify,verifyStatus);
   const refresh=button("Получить список моделей");const list=document.createElement("div");list.className="ay-settings-model-list";
-  refresh.onclick=async()=>{try{const r=await fetch("/api/cloud/models");const d=await r.json() as {models:string[];warning?:string};if(d.warning)list.textContent=d.warning;models=[...new Set(d.models)];renderModels();list.replaceChildren(...models.map(m=>{const b=button(m);b.onclick=()=>{void saveRemote({model:m}).then(()=>{modelSelect.value=m;});};return b;}));}catch(e){list.textContent=String(e);}};
+  refresh.onclick=async()=>{try{const r=await fetch("/api/cloud/models");const d=await r.json() as {models:string[];warning?:string};models=[...new Set(d.models)];renderModels();list.replaceChildren(...(d.warning?[settingsRow("Предупреждение",d.warning)]:[]),...models.map(m=>{const b=button(m);b.onclick=()=>{void saveRemote({model:m}).then(()=>{modelSelect.value=m;});};return b;}));}catch(e){list.textContent=String(e);}};
   body.append(refresh,list);
  }else if(sec.id==="persona"){
   const field=document.createElement("textarea");field.rows=6;field.value=remoteSettings.instructions;field.placeholder="Как должна отвечать Ayureika";
@@ -271,6 +273,7 @@ function addSettingsCard(sec:SettingsSection){
  }else if(sec.id==="memory"){
   body.append(toggleSetting("Использовать память и историю как контекст",remoteSettings.memoryEnabled,v=>saveRemote({memoryEnabled:v})));
   body.append(textField("Модель Cloud.ru embeddings",remoteSettings.embeddingModel||"",v=>saveRemote({embeddingModel:v})));
+  const stats=button("Проверить состояние SQLite");const statsLabel=document.createElement("small");stats.onclick=async()=>{try{const r=await fetch("/api/memory/stats");const d=await r.json() as {count:number;indexed:number;audits:number};if(!r.ok)throw Error("База недоступна");statsLabel.textContent="Записей: "+d.count+" · Векторов: "+d.indexed+" · Операций: "+d.audits;}catch(e){statsLabel.textContent=String(e);}};body.append(stats,statsLabel);
   const reindex=button("Индексировать память");const indexing=document.createElement("small");
   reindex.onclick=async()=>{reindex.disabled=true;indexing.textContent="Индексация…";try{const r=await fetch("/api/memory/reindex",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});const d=await r.json() as {indexed?:number;remaining?:boolean;error?:string};indexing.textContent=r.ok?"Проиндексировано: "+d.indexed+(d.remaining?" · Есть ещё записи":" · Готово"):d.error||"Ошибка";}catch(e){indexing.textContent=String(e);}finally{reindex.disabled=false;}};
   body.append(reindex,indexing);
@@ -286,6 +289,7 @@ function addSettingsCard(sec:SettingsSection){
   body.append(note,input,save,searchInput,searchButton,all,list,status);void render();
  }else if(sec.id==="tools"){
   body.append(toggleSetting("Разрешить инструменты",remoteSettings.toolsEnabled,v=>saveRemote({toolsEnabled:v})));
+  const permissionLabel=document.createElement("strong");permissionLabel.textContent="Разрешения по инструментам";body.append(permissionLabel);for(const [id,label] of [["calculator","Калькулятор"],["clock","Часы UTC"],["memory_search","Поиск памяти"]])body.append(toggleSetting(label,remoteSettings.allowedTools.includes(id),async enabled=>{const next=enabled?[...new Set([...remoteSettings.allowedTools,id])]:remoteSettings.allowedTools.filter(x=>x!==id);await saveRemote({allowedTools:next});}));
   body.append(settingsRow("Безопасные инструменты","Калькулятор, часы и поиск в памяти. Модель может запросить инструмент в чате, но запуск происходит только после подтверждения."));
   const select=document.createElement("select");for(const [v,label] of [["calculator","Калькулятор"],["clock","Текущее время UTC"],["memory_search","Поиск в памяти"]]){const opt=document.createElement("option");opt.value=v;opt.textContent=label;select.append(opt);}
   const input=document.createElement("input");input.placeholder="Выражение или поисковый запрос";const run=button("Выполнить");const result=document.createElement("pre");const audit=button("Журнал операций");
@@ -303,9 +307,13 @@ function addSettingsCard(sec:SettingsSection){
   const accents=document.createElement("div");accents.className="ay-settings-swatches";
   for(const color of ["#caa65b","#6788bd","#9572bc","#579b82","#b76d6d"]){const dot=button("","Цвет "+color);dot.style.background=color;dot.className="ay-settings-color";dot.onclick=()=>{ui.accent=color;applyUi();};accents.append(dot);}
   body.append(settingsRow("Цвет оформления","Выберите цвет акцента"),accents);
+  body.append(choice("Шрифт",[["12","Компактный"],["14","Стандартный"],["17","Крупный"]],ui.font,v=>{ui.font=v;applyUi();}));
   body.append(choice("Скругление",[["4","Строгое"],["16","Обычное"],["26","Круглое"]],ui.radius,v=>{ui.radius=v;applyUi();}));
   body.append(choice("Масштаб",[["85","85%"],["100","100%"],["115","115%"]],ui.scale,v=>{ui.scale=v;applyUi();}));
  }else if(sec.id==="chat"){
+  body.append(toggleSetting("Потоковые ответы (при отключённых инструментах)",remoteSettings.streamEnabled,v=>saveRemote({streamEnabled:v})));
+  body.append(choice("Контекст истории",[["0","Без истории"],["5","5 сообщений"],["10","10 сообщений"],["20","20 сообщений"]],String(remoteSettings.historyLimit),v=>saveRemote({historyLimit:Number(v)})));
+  body.append(settingsRow("Остановка генерации","Кнопка «Стоп» отменяет текущий запрос. Уже полученный текст остаётся в чате."));
   body.append(choice("Размер текста",[["12","Мелкий"],["14","Обычный"],["17","Крупный"]],ui.font,v=>{ui.font=v;applyUi();}));
   body.append(choice("Плотность сообщений",[["compact","Компактная"],["normal","Обычная"]],ui.density,v=>{ui.density=v;applyUi();}));
   const reset=button("Сбросить положение окна");reset.onclick=()=>{try{localStorage.removeItem(FRAME_KEY);}catch{}panel.style.left="";panel.style.top="";panel.style.width="";panel.style.height="";panel.style.right="";panel.style.bottom="";};body.append(reset);
@@ -319,7 +327,12 @@ function addSettingsCard(sec:SettingsSection){
    if(d.ui){ui={...ui,...d.ui};applyUi();}if(Array.isArray(d.commands))await saveRemote({quickCommands:d.commands});if(typeof d.instructions==="string")await saveRemote({instructions:d.instructions});status.textContent="Восстановлено";
   }catch(e){status.textContent=String(e);}};
   const clear=button("Удалить всю историю чатов");clear.onclick=()=>{if(!confirm("Безвозвратно удалить все переписки?"))return;chats=[makeChat()];current=chats[0]!.id;persist();renderList();paint();};
+  const memoryBackup=button("Скачать резервную копию SQLite-памяти и настроек");memoryBackup.onclick=async()=>{try{const r=await fetch("/api/data/export");if(!r.ok)throw Error("Не удалось получить данные сервера");downloadJson(await r.json());}catch(e){status.textContent=String(e);}};
+  const memoryFile=document.createElement("input");memoryFile.type="file";memoryFile.accept=".json,application/json";const importMemory=button("Восстановить память из файла");importMemory.onclick=async()=>{const f=memoryFile.files?.[0];if(!f)return;try{if(f.size>1e6)throw Error("Файл слишком большой");const data=JSON.parse(await f.text()) as {kind?:string;version?:number;facts?:string[]};if(data.kind!=="ayureika-server-backup"||data.version!==1||!Array.isArray(data.facts))throw Error("Неверный формат");if(!confirm("Добавить записи памяти из резервной копии?"))return;const r=await fetch("/api/data/import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...data,confirm:true})});const result=await r.json() as {imported?:number;error?:string};if(!r.ok)throw Error(result.error||"Ошибка");status.textContent="Импортировано записей: "+result.imported;}catch(e){status.textContent=String(e);}};
+  body.append(memoryBackup,memoryFile,importMemory);
   body.append(backup,settingsRow("Импорт резервной копии","Выберите ранее сохранённый файл Ayureika"),file,status,clear);
+ }else if(sec.id==="diagnostics"){
+  const check=button("Проверить компоненты");const out=document.createElement("pre");check.onclick=async()=>{out.textContent="Проверка…";try{const [local,cloud]=await Promise.all([fetch("/api/diagnostics").then(r=>r.json()),fetch("/api/cloud/check").then(r=>r.json())]);out.textContent="Сервер: "+local.server+"\nSQLite: "+local.sqlite+"\nЗаписей памяти: "+local.memory.count+"\nCloud.ru: "+(cloud.ok?"доступен":cloud.error||"нет соединения")+"\nПоток: "+(local.streamEnabled?"включён":"выключен");}catch(e){out.textContent=String(e);}};body.append(check,out);
  }else if(sec.id==="about"){
   body.append(settingsRow("Проект","Ayureika · интерфейс TypeScript, сервер Node.js"));
   const link=document.createElement("a");link.href="https://github.com/Aspksa/Ayureika";link.target="_blank";link.rel="noopener noreferrer";link.textContent="Открыть репозиторий GitHub";
