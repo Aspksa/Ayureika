@@ -7,6 +7,14 @@ const dataDir=path.join(__dirname,"data");
 fs.mkdirSync(dataDir,{recursive:true});
 const db=new DatabaseSync(path.join(dataDir,"memory.sqlite"));
 db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP); CREATE TABLE IF NOT EXISTS tool_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, input TEXT NOT NULL, output TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+db.exec("CREATE TABLE IF NOT EXISTS memory_vectors (id TEXT NOT NULL, model TEXT NOT NULL, vector TEXT NOT NULL, PRIMARY KEY(id,model))");
+const vectorUpsert=db.prepare("INSERT INTO memory_vectors(id,model,vector) VALUES (?,?,?) ON CONFLICT(id,model) DO UPDATE SET vector=excluded.vector");
+const vectorRows=db.prepare("SELECT m.id,m.content,m.created_at,v.vector FROM memories m JOIN memory_vectors v ON v.id=m.id WHERE v.model=? LIMIT 500");
+const missingRows=db.prepare("SELECT m.id,m.content FROM memories m LEFT JOIN memory_vectors v ON m.id=v.id AND v.model=? WHERE v.id IS NULL LIMIT ?");
+function validateVector(v){if(!Array.isArray(v)||v.length<2||v.length>4096||v.some(n=>typeof n!=="number"||!Number.isFinite(n)))throw Error("Некорректный вектор");return v;}
+function putVector(id,model,vector){if(!/^[a-f0-9]{64}$/.test(id)||typeof model!=="string"||!model)throw Error("Неверные параметры");vectorUpsert.run(id,model,JSON.stringify(validateVector(vector)));}
+function missingVectors(model,limit=20){return missingRows.all(model,Math.min(100,Math.max(1,limit)));}
+function semantic(model,query,limit=5){const q=validateVector(query);const qn=Math.hypot(...q);if(!qn)return [];return vectorRows.all(model).map(row=>{const v=JSON.parse(row.vector);if(v.length!==q.length)return null;const norm=Math.hypot(...v);if(!norm)return null;const score=v.reduce((n,x,i)=>n+x*q[i],0)/(norm*qn);return {id:row.id,content:row.content,created_at:row.created_at,score};}).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,limit);}
 const insert=db.prepare("INSERT OR IGNORE INTO memories(id,content) VALUES (?,?)");
 const searchStmt=db.prepare("SELECT id,content,created_at FROM memories WHERE content LIKE ? ESCAPE '\\' ORDER BY created_at DESC LIMIT ?");
 const listStmt=db.prepare("SELECT id,content,created_at FROM memories ORDER BY created_at DESC LIMIT ?");
@@ -41,4 +49,4 @@ function term(){let v=factor();while(["*","/","%"].includes(tokens[i])){const op
 function sum(){let v=term();while(["+","-"].includes(tokens[i])){const op=tokens[i++];v=op==="+"?v+term():v-term();}return v;}
 const value=sum();if(i!==tokens.length||!Number.isFinite(value))throw Error("Некорректное вычисление");output=String(value);}
 auditStmt.run(name,String(input).slice(0,500),String(output).slice(0,4000));return {name,output};}
-module.exports={remember,search,relevant,extractExplicit,count,list,forget,execute,logs:()=>logsStmt.all()};
+module.exports={remember,search,relevant,extractExplicit,count,list,forget,execute,putVector,missingVectors,semantic,logs:()=>logsStmt.all()};
