@@ -41,6 +41,15 @@ async function retrieve(c,query){if(!c.memoryEnabled)return [];if(!c.embeddingMo
 try{for(const row of memory.missingVectors(c.embeddingModel,10)){try{memory.putVector(row.id,c.embeddingModel,await embed(c,row.content));}catch{break;}}
 const vector=await embed(c,query);return memory.semantic(c.embeddingModel,vector,5).filter(x=>x.score>0.25);
 }catch{return memory.relevant(query,5);}}
+let indexBusy=false;
+const indexState={lastRun:null,lastError:"",processed:0};
+async function indexTick(){
+ if(indexBusy)return;const c=load();if(!c.memoryEnabled||!c.embeddingModel||!auth(c))return;
+ indexBusy=true;
+ try{for(const row of memory.missingVectors(c.embeddingModel,2)){try{memory.putVector(row.id,c.embeddingModel,await embed(c,row.content));indexState.processed++;indexState.lastError="";}catch(e){indexState.lastError=e instanceof Error?e.message:"Ошибка индексации";break;}}indexState.lastRun=new Date().toISOString();}
+ finally{indexBusy=false;}
+}
+const indexTimer=setInterval(()=>{void indexTick().catch(e=>{indexState.lastError=String(e);indexBusy=false;});},30000);indexTimer.unref();
 function cleanupPending(){for(const [id,entry] of pendingTools)if(entry.expires<Date.now())pendingTools.delete(id);}
 function stageTool(c,model,messages,answer,step){
  const calls=answer?.choices?.[0]?.message?.tool_calls;
@@ -89,7 +98,7 @@ async function handler(req,res){
    }
    if(pathname==="/api/diagnostics"&&req.method==="GET"){
     const c=load(),db=memory.stats(c.embeddingModel);
-    return json(res,200,{server:"ok",sqlite:"ok",memory:db,cloudConfigured:Boolean(c.endpoint&&auth(c)&&c.model),cloud:cloudHealth,streamEnabled:c.streamEnabled,toolsEnabled:c.toolsEnabled});
+    return json(res,200,{server:"ok",sqlite:"ok",memory:db,cloudConfigured:Boolean(c.endpoint&&auth(c)&&c.model),cloud:cloudHealth,indexing:{...indexState,remaining:c.embeddingModel?memory.missingVectors(c.embeddingModel,1).length>0:false},streamEnabled:c.streamEnabled,toolsEnabled:c.toolsEnabled});
    }
    if(pathname==="/api/memory/reviews"&&req.method==="GET")return json(res,200,{items:memory.reviews()});
    if(pathname==="/api/memory/reviews"&&req.method==="POST"){const d=await body(req);if(d.confirm!==true)return json(res,403,{error:"Требуется подтверждение"});return json(res,200,{updated:memory.reviewDecision(d.id,d.status)});}
