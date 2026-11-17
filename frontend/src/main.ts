@@ -1,30 +1,45 @@
 const canvas = document.querySelector<HTMLCanvasElement>("#surface");
-if (!canvas) {
-  throw new Error("Не найден Canvas #surface");
-}
-const context = canvas.getContext("2d");
-if (!context) {
-  throw new Error("Браузер не поддерживает Canvas 2D");
-}
-
+const statusElement = document.querySelector<HTMLElement>("#status");
+if (!canvas) throw new Error("Не найден Canvas #surface");
+const ctx = canvas.getContext("2d");
+if (!ctx) throw new Error("Браузер не поддерживает Canvas 2D");
 function render(): void {
-  const width = window.innerWidth;
-  const height = window.innerHeight;
+  const rect = canvas!.getBoundingClientRect();
+  const w = rect.width, h = rect.height;
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
-  canvas!.width = Math.round(width * ratio);
-  canvas!.height = Math.round(height * ratio);
-  context!.setTransform(ratio, 0, 0, ratio, 0, 0);
-
-  context!.fillStyle = "#0b0b0d";
-  context!.fillRect(0, 0, width, height);
-  context!.textAlign = "center";
-  context!.textBaseline = "middle";
-  context!.fillStyle = "#d8b66a";
-  context!.font = "600 " + Math.min(42, Math.max(26, width / 16)) + "px system-ui, sans-serif";
-  context!.fillText("AYUREIKA", width / 2, height / 2 - 28);
-  context!.fillStyle = "#d0d0d0";
-  context!.font = Math.min(17, Math.max(13, width / 35)) + "px system-ui, sans-serif";
-  context!.fillText("Веб-интерфейс загружен", width / 2, height / 2 + 24);
+  canvas!.width = Math.max(1, Math.round(w * ratio));
+  canvas!.height = Math.max(1, Math.round(h * ratio));
+  ctx!.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx!.fillStyle = "#0b0b0d";
+  ctx!.fillRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2, radius = Math.min(w, h) * 0.28;
+  for (let ring = 3; ring >= 1; ring--) {
+    ctx!.beginPath();
+    ctx!.arc(cx, cy, radius * ring / 3, 0, Math.PI * 2);
+    ctx!.strokeStyle = ring === 3 ? "#6c542d" : "#342a1b";
+    ctx!.lineWidth = 1;
+    ctx!.stroke();
+  }
+  for (let i = 0; i < 8; i++) {
+    const angle = i * Math.PI / 4 - Math.PI / 2;
+    const x = cx + Math.cos(angle) * radius * .78;
+    const y = cy + Math.sin(angle) * radius * .78;
+    ctx!.beginPath();
+    ctx!.moveTo(cx, cy);
+    ctx!.lineTo(x, y);
+    ctx!.strokeStyle = "#4b3c24";
+    ctx!.stroke();
+    ctx!.beginPath();
+    ctx!.arc(x, y, 4, 0, Math.PI * 2);
+    ctx!.fillStyle = "#d8b66a";
+    ctx!.fill();
+  }
+  ctx!.textAlign = "center";
+  ctx!.textBaseline = "middle";
+  ctx!.fillStyle = "#d8b66a";
+  ctx!.font = "600 " + Math.max(14, Math.min(25, w / 25)) + "px system-ui";
+  ctx!.fillText("AYUREIKA", cx, cy);
 }
 window.addEventListener("resize", render);
 render();
+if (statusElement) statusElement.textContent = "Интерфейс работает · сервер запущен";

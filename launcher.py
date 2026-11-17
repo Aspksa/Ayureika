@@ -12,6 +12,12 @@ import time
 import urllib.error
 import urllib.request
 import webbrowser
+import json
+
+# Preserve Russian diagnostics when Windows CI uses a non-Unicode console.
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(errors="backslashreplace")
 
 ROOT = Path(__file__).resolve().parent
 LOG_DIR = ROOT / "logs"
@@ -22,6 +28,7 @@ LOG = logging.getLogger("ayureika")
 HIDDEN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 PROCESSES = []
 JOB_HANDLE = None
+INSTANCE_FILE = LOG_DIR / 'instance.json'
 
 
 def ensure_windows_job():
@@ -128,7 +135,8 @@ def require_node():
 def check_sqlite():
     database = ROOT / "data" / "ayureika.db"
     database.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(database, timeout=5) as connection:
+    connection = sqlite3.connect(database, timeout=5)
+    try:
         status = connection.execute("PRAGMA quick_check").fetchone()[0]
         if status != "ok":
             raise RuntimeError("SQLite повреждена: " + status)
@@ -142,6 +150,8 @@ def check_sqlite():
             connection.execute("ROLLBACK TO ayureika_probe")
             connection.execute("RELEASE ayureika_probe")
 
+    finally:
+        connection.close()
 
 def free_port():
     with socket.socket() as sock:
@@ -234,6 +244,16 @@ def windows_mutex():
     if ctypes.get_last_error() == 183:
         kernel.CloseHandle(ctypes.c_void_p(handle))
         print("Ayureika уже запущена.")
+        try:
+            port = int(json.loads(INSTANCE_FILE.read_text(encoding="utf-8"))["port"])
+            url = "http://127.0.0.1:%s/" % port
+            if b"/build/main.js" in fetch(url):
+                webbrowser.open(url)
+                print("Открыта работающая Ayureika:", url)
+            else:
+                print("Сервер ещё загружается.")
+        except (OSError, ValueError, KeyError, urllib.error.URLError):
+            print("Старый экземпляр не отвечает. Завершите его и повторите запуск.")
         return False
     return handle
 
@@ -261,6 +281,7 @@ def main():
         verify_frontend(web_port, html)
         url = "http://127.0.0.1:%s/" % web_port
         print("Ayureika готова:", url)
+        INSTANCE_FILE.write_text(json.dumps({"port": web_port}), encoding="utf-8")
         if os.environ.get("AYUREIKA_CI_CHECK") == "1":
             return
         webbrowser.open(url)
@@ -270,6 +291,7 @@ def main():
         raise RuntimeError("Один из серверов остановился")
     finally:
         stop_all()
+        INSTANCE_FILE.unlink(missing_ok=True)
         if JOB_HANDLE:
             ctypes.WinDLL('kernel32').CloseHandle(ctypes.c_void_p(JOB_HANDLE))
         if mutex:
