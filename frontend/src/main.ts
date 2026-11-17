@@ -96,7 +96,7 @@ avatar.setAttribute("aria-expanded","false"); close.onclick=closeChat;
 let active: AbortController | null = null;
 stop.onclick = () => active?.abort();
 form.onsubmit = async e => {
-  e.preventDefault(); const message=input.value.trim(); if(!message || active)return;
+  e.preventDefault(); let message=input.value.trim(); if(!message || active)return; const shortcut=remoteSettings.quickCommands.find(c=>message==='/'+c.name);if(shortcut)message=shortcut.text;
   const target=conv(); target.messages.push({role:"user",content:message}); if(target.messages.length===1)target.title=message.slice(0,55);
   persist();renderList();paint();input.value="";updateContext();
   const controller = new AbortController(); active=controller; avatar.classList.add("busy"); busyBadge.hidden=false; send.disabled=true;stop.hidden=false;status.textContent="Ожидание ответа…";
@@ -192,6 +192,42 @@ function settingsRow(label:string,detail:string):HTMLElement{
  row.append(text,hint);return row;
 }
 const settingsCards=new Map<string,HTMLElement>();
+
+type RemoteSettings={endpoint:string;model:string;fallbackModel:string;instructions:string;memoryEnabled:boolean;toolsEnabled:boolean;quickCommands:{name:string;text:string}[];keyConfigured:boolean};
+let remoteSettings:RemoteSettings={endpoint:"",model:"",fallbackModel:"",instructions:"",memoryEnabled:true,toolsEnabled:false,quickCommands:[],keyConfigured:false};
+const uiKey="ayureika:settings:ui:v1";
+type UiPrefs={theme:string;accent:string;radius:string;scale:string;font:string;density:string};
+let ui:UiPrefs={theme:"dark",accent:"#caa65b",radius:"16",scale:"100",font:"14",density:"normal"};
+try{ui={...ui,...JSON.parse(localStorage.getItem(uiKey)||"{}")};}catch{}
+function applyUi(){document.documentElement.style.setProperty("--ay-accent",ui.accent);document.documentElement.style.setProperty("--ay-radius",ui.radius+"px");document.documentElement.style.setProperty("--ay-scale",String(Number(ui.scale)/100));document.documentElement.style.setProperty("--ay-font",ui.font+"px");document.documentElement.style.setProperty("--ay-density",ui.density==="compact"?"8px":"14px");document.documentElement.dataset.ayTheme=ui.theme;try{localStorage.setItem(uiKey,JSON.stringify(ui));}catch{}}
+applyUi();
+async function saveRemote(patch:Partial<RemoteSettings>&{apiKey?:string;clearApiKey?:boolean}){
+ const response=await fetch("/api/settings",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(patch)});
+ const data=await response.json() as RemoteSettings&{error?:string};if(!response.ok)throw Error(data.error||"Не удалось сохранить");
+ remoteSettings=data;return data;
+}
+function textField(label:string,value:string,onSave:(value:string)=>Promise<unknown>,secret=false){
+ const wrap=document.createElement("label");wrap.className="ay-settings-field";
+ const title=document.createElement("strong");title.textContent=label;
+ const field=document.createElement("input");field.type=secret?"password":"text";field.value=value;field.autocomplete="off";
+ const save=button("Сохранить");const note=document.createElement("small");note.setAttribute("role","status");
+ save.onclick=async()=>{save.disabled=true;note.textContent="Сохранение…";try{await onSave(field.value);note.textContent="Сохранено";if(secret)field.value="";}catch(e){note.textContent=String(e);}finally{save.disabled=false;}};
+ wrap.append(title,field,save,note);return wrap;
+}
+function choice(label:string,options:[string,string][],value:string,update:(v:string)=>void){
+ const wrap=document.createElement("label");wrap.className="ay-settings-field";
+ const title=document.createElement("strong");title.textContent=label;const select=document.createElement("select");
+ for(const [v,t] of options){const o=document.createElement("option");o.value=v;o.textContent=t;select.append(o);}select.value=value;
+ select.onchange=()=>update(select.value);wrap.append(title,select);return wrap;
+}
+function toggleSetting(label:string,value:boolean,change:(v:boolean)=>Promise<unknown>){
+ const wrap=document.createElement("label");wrap.className="ay-settings-toggle";
+ const check=document.createElement("input");check.type="checkbox";check.checked=value;
+ const name=document.createElement("strong");name.textContent=label;const status=document.createElement("small");
+ check.onchange=async()=>{check.disabled=true;try{await change(check.checked);status.textContent="Сохранено";}catch(e){check.checked=!check.checked;status.textContent=String(e);}finally{check.disabled=false;}};
+ wrap.append(check,name,status);return wrap;
+}
+function downloadJson(data:unknown){const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="ayureika-backup.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function addSettingsCard(sec:SettingsSection){
  const card=document.createElement("section");card.className="ay-settings-card";card.id="ay-settings-"+sec.id;
  const top=button("",sec.title);top.className="ay-settings-card-head";
@@ -207,30 +243,61 @@ function addSettingsCard(sec:SettingsSection){
  top.onclick=()=>{const hide=!body.hidden;body.hidden=hide;card.classList.toggle("collapsed",hide);top.setAttribute("aria-expanded",String(!hide));
  collapsedIds=hide?[...new Set([...collapsedIds,sec.id])]:collapsedIds.filter(id=>id!==sec.id);
  try{localStorage.setItem(collapsedKey,JSON.stringify(collapsedIds));}catch{}};
- if(sec.id==="look"){
-   const preview=document.createElement("div");preview.className="ay-settings-theme-preview";
-   for(const theme of ["Как в системе","Светлая","Тёмная"]){const tile=document.createElement("div");tile.className="ay-settings-theme-tile"+(theme==="Тёмная"?" active":"");
-    const miniature=document.createElement("span");miniature.className="ay-settings-theme-mini";tile.append(miniature,document.createTextNode(theme));preview.append(tile);}
-   body.append(settingsRow("Тема интерфейса","Предпросмотр вариантов JUUNIBI. В Ayureika закреплена чёрно-золотая тема."),preview);
-   const swatches=document.createElement("div");swatches.className="ay-settings-swatches";
-   for(const color of ["#caa65b","#6788bd","#9572bc","#579b82","#b76d6d"]){const dot=document.createElement("span");dot.style.background=color;dot.title=color;swatches.append(dot);}
-   body.append(settingsRow("Цвет оформления","Образцы цветовых акцентов JUUNIBI"),swatches);
-   body.append(settingsRow("Скругление и масштаб","Дизайн раздела; переключатели пока не подключены"));
+ if(sec.id==="conn"){
+  body.append(textField("Адрес совместимого API Cloud.ru (HTTPS, до /v1)",remoteSettings.endpoint,v=>saveRemote({endpoint:v})));
+  body.append(textField("API-ключ (сохраняется на локальном сервере)",remoteSettings.keyConfigured?"":"",v=>saveRemote({apiKey:v}),true));
+  body.append(settingsRow("Состояние ключа",remoteSettings.keyConfigured?"Ключ настроен":"Ключ не задан"));
+  const check=button("Проверить подключение");const status=document.createElement("small");status.setAttribute("role","status");
+  check.onclick=async()=>{try{const r=await fetch("/api/health");const h=await r.json() as {server:boolean;endpointConfigured:boolean;keyConfigured:boolean;modelConfigured:boolean};status.textContent="Сервер: "+(h.server?"OK":"нет")+" · Адрес: "+(h.endpointConfigured?"OK":"нет")+" · Ключ: "+(h.keyConfigured?"OK":"нет")+" · Модель: "+(h.modelConfigured?"OK":"нет");}catch(e){status.textContent=String(e);}};
+  body.append(check,status);
  }else if(sec.id==="model"){
-   body.append(settingsRow("Выбранная модель",modelSelect.value||"Модель не настроена"));
-   body.append(settingsRow("Список моделей","Доступен в заголовке чата, если модели заданы на сервере"));
+  body.append(textField("Основная модель",remoteSettings.model,async v=>{await saveRemote({model:v});models=[...new Set([...models,v].filter(Boolean))];renderModels();}));
+  body.append(textField("Запасная модель",remoteSettings.fallbackModel,v=>saveRemote({fallbackModel:v})));
+  const refresh=button("Получить список моделей");const list=document.createElement("div");list.className="ay-settings-model-list";
+  refresh.onclick=async()=>{try{const r=await fetch("/api/cloud/models");const d=await r.json() as {models:string[]};models=[...new Set(d.models)];renderModels();list.replaceChildren(...models.map(m=>{const b=button(m);b.onclick=()=>{void saveRemote({model:m}).then(()=>{modelSelect.value=m;});};return b;}));}catch(e){list.textContent=String(e);}};
+  body.append(refresh,list);
+ }else if(sec.id==="persona"){
+  const field=document.createElement("textarea");field.rows=6;field.value=remoteSettings.instructions;field.placeholder="Как должна отвечать Ayureika";
+  const save=button("Сохранить инструкции");const status=document.createElement("small");save.onclick=()=>{void saveRemote({instructions:field.value}).then(()=>{status.textContent="Сохранено";}).catch(e=>{status.textContent=String(e);});};
+  body.append(field,save,status);
+ }else if(sec.id==="memory"){
+  body.append(toggleSetting("Использовать историю сообщений как контекст",remoteSettings.memoryEnabled,v=>saveRemote({memoryEnabled:v})));
+  body.append(settingsRow("Хранилище истории","Диалоги сохраняются локально в браузере. Семантический поиск пока не поддерживается."));
+ }else if(sec.id==="tools"){
+  body.append(toggleSetting("Разрешить инструменты",remoteSettings.toolsEnabled,v=>saveRemote({toolsEnabled:v})));
+  body.append(settingsRow("Доступность","Встроенных инструментов вызова функций пока нет. Переключатель сохраняет разрешение на будущее."));
+ }else if(sec.id==="quick"){
+  const list=document.createElement("div");const render=()=>{list.replaceChildren(...remoteSettings.quickCommands.map((c,i)=>{const row=document.createElement("div");row.className="ay-settings-command";const name=document.createElement("span");name.textContent="/"+c.name+" — "+c.text.slice(0,70);const del=button("Удалить");del.onclick=()=>{void saveRemote({quickCommands:remoteSettings.quickCommands.filter((_,j)=>j!==i)}).then(render);};row.append(name,del);return row;}));};
+  const name=document.createElement("input");name.placeholder="Имя команды";const value=document.createElement("textarea");value.placeholder="Текст команды";value.rows=2;
+  const add=button("Добавить команду");const status=document.createElement("small");
+  add.onclick=()=>{const n=name.value.trim().replace(/^\//,"");if(!/^[a-zA-Zа-яА-ЯёЁ0-9_-]{1,32}$/.test(n)||!value.value.trim()){status.textContent="Укажите имя и текст";return;}void saveRemote({quickCommands:[...remoteSettings.quickCommands,{name:n,text:value.value.trim()}]}).then(()=>{name.value="";value.value="";render();status.textContent="Сохранено";}).catch(e=>{status.textContent=String(e);});};
+  body.append(settingsRow("Быстрые команды","Введите /имя в чат, чтобы подставить текст"),list,name,value,add,status);render();
+ }else if(sec.id==="look"){
+  body.append(choice("Тема",[["dark","Тёмная"],["light","Светлая"],["auto","Как в системе"]],ui.theme,v=>{ui.theme=v;applyUi();}));
+  const accents=document.createElement("div");accents.className="ay-settings-swatches";
+  for(const color of ["#caa65b","#6788bd","#9572bc","#579b82","#b76d6d"]){const dot=button("","Цвет "+color);dot.style.background=color;dot.className="ay-settings-color";dot.onclick=()=>{ui.accent=color;applyUi();};accents.append(dot);}
+  body.append(settingsRow("Цвет оформления","Выберите цвет акцента"),accents);
+  body.append(choice("Скругление",[["4","Строгое"],["16","Обычное"],["26","Круглое"]],ui.radius,v=>{ui.radius=v;applyUi();}));
+  body.append(choice("Масштаб",[["85","85%"],["100","100%"],["115","115%"]],ui.scale,v=>{ui.scale=v;applyUi();}));
  }else if(sec.id==="chat"){
-   body.append(settingsRow("История переписок",String(chats.length)+" чатов в текущем браузере"));
-   body.append(settingsRow("Размер окна","Изменяется мышью за нижний угол окна чата"));
-   body.append(settingsRow("Шрифт и плотность","Визуальные образцы; настройка не подключена"));
- }else if(sec.id==="conn"){
-   body.append(settingsRow("Состояние подключения","Реальный Cloud.ru API пока не подключён"));
-   body.append(settingsRow("Ключ API","Ввод ключа здесь не реализован; не храните ключ в браузере"));
+  body.append(choice("Размер текста",[["12","Мелкий"],["14","Обычный"],["17","Крупный"]],ui.font,v=>{ui.font=v;applyUi();}));
+  body.append(choice("Плотность сообщений",[["compact","Компактная"],["normal","Обычная"]],ui.density,v=>{ui.density=v;applyUi();}));
+  const reset=button("Сбросить положение окна");reset.onclick=()=>{try{localStorage.removeItem(FRAME_KEY);}catch{}panel.style.left="";panel.style.top="";panel.style.width="";panel.style.height="";panel.style.right="";panel.style.bottom="";};body.append(reset);
  }else if(sec.id==="data"){
-   body.append(settingsRow("Хранение переписок","В текущем браузере (localStorage)"));
-   body.append(settingsRow("Резервное копирование","Пока не реализовано"));
- }else{
-   for(const item of sec.items)body.append(settingsRow(item,"Раздел дизайна JUUNIBI · функция пока не подключена"));
+  const backup=button("Скачать резервную копию");backup.onclick=()=>downloadJson({kind:"ayureika-backup",version:1,chats,ui,commands:remoteSettings.quickCommands,instructions:remoteSettings.instructions});
+  const file=document.createElement("input");file.type="file";file.accept="application/json,.json";const status=document.createElement("small");
+  file.onchange=async()=>{const f=file.files?.[0];if(!f)return;try{if(f.size>5e6)throw Error("Файл слишком большой");const d=JSON.parse(await f.text()) as {kind?:string;version?:number;chats?:Conversation[];ui?:Partial<UiPrefs>;commands?:RemoteSettings["quickCommands"];instructions?:string};
+   if(d.kind!=="ayureika-backup"||d.version!==1||!Array.isArray(d.chats))throw Error("Неподходящий формат");
+   if(!confirm("Восстановить резервную копию? Текущие чаты будут заменены."))return;
+   chats=d.chats.filter(c=>c&&typeof c.id==="string"&&typeof c.title==="string"&&Array.isArray(c.messages)).slice(0,100);if(!chats.length)chats=[makeChat()];current=chats[0]!.id;persist();renderList();paint();
+   if(d.ui){ui={...ui,...d.ui};applyUi();}if(Array.isArray(d.commands))await saveRemote({quickCommands:d.commands});if(typeof d.instructions==="string")await saveRemote({instructions:d.instructions});status.textContent="Восстановлено";
+  }catch(e){status.textContent=String(e);}};
+  const clear=button("Удалить всю историю чатов");clear.onclick=()=>{if(!confirm("Безвозвратно удалить все переписки?"))return;chats=[makeChat()];current=chats[0]!.id;persist();renderList();paint();};
+  body.append(backup,settingsRow("Импорт резервной копии","Выберите ранее сохранённый файл Ayureika"),file,status,clear);
+ }else if(sec.id==="about"){
+  body.append(settingsRow("Проект","Ayureika · интерфейс TypeScript, сервер Node.js"));
+  const link=document.createElement("a");link.href="https://github.com/Aspksa/Ayureika";link.target="_blank";link.rel="noopener noreferrer";link.textContent="Открыть репозиторий GitHub";
+  body.append(link,settingsRow("Горячие клавиши","Ctrl+, — настройки · Escape — закрыть"));
  }
  card.append(top,body);settingsContent.append(card);settingsCards.set(sec.id,card);
  const nav=button(sec.icon+"  "+sec.title);nav.className="ay-settings-link";nav.dataset.section=sec.id;
@@ -245,7 +312,7 @@ settingsSearch.oninput=()=>{
  if(q&&match&&card.classList.contains("collapsed")){const top=card.querySelector<HTMLButtonElement>(".ay-settings-card-head");top?.click();}
  }
 };
-function showSettings(){settingsPage.hidden=false;panel.hidden=true;settingsSearch.focus();}
+async function showSettings(){try{const r=await fetch('/api/settings');if(r.ok){remoteSettings=await r.json() as RemoteSettings;settingsContent.replaceChildren();settingsLinks.replaceChildren();settingsCards.clear();for(const section of settingsSections)addSettingsCard(section);}}catch{}settingsPage.hidden=false;panel.hidden=true;settingsSearch.focus();}
 function hideSettings(){settingsPage.hidden=true;}
 settingsOpen.onclick=showSettings;settingsExit.onclick=hideSettings;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!settingsPage.hidden)hideSettings();if(e.ctrlKey&&e.key===","){e.preventDefault();showSettings();}});

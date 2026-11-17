@@ -70,3 +70,32 @@ html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden;font-f
 .ay-settings-swatches span{height:24px;width:24px;border-radius:50%;border:2px solid #ffffff22}
 @media(max-width:760px){.ay-settings-header{padding:14px 16px}.ay-settings-header h1{font-size:20px}.ay-settings-layout{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);gap:10px;padding:10px}.ay-settings-nav{padding:10px;gap:8px}.ay-settings-nav nav{flex-direction:row;overflow-x:auto;flex:none}.ay-settings-link{white-space:nowrap;width:auto;font-size:12px;padding:9px}.ay-settings-content{padding:0 0 30px}.ay-settings-card-head{padding:12px}.ay-settings-card-body{padding:0 14px 14px}.ay-settings-glyph{width:35px;height:35px}.ay-settings-theme-tile{padding:6px;font-size:10px}}
 @media(prefers-reduced-motion:reduce){.ay-settings-content{scroll-behavior:auto}}
+
+
+/* Active settings controls */
+.ay-settings-field{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;align-items:center;padding:10px 0;border-bottom:1px solid #30281c}
+.ay-settings-field>strong,.ay-settings-field>small{grid-column:1/-1}
+.ay-settings-field input,.ay-settings-field select,.ay-settings-card-body textarea,.ay-settings-card-body>input{background:#211c15;color:#f5e6c7;border:1px solid #5a492b;border-radius:9px;padding:10px;min-width:0;width:100%;font:inherit}
+.ay-settings-card-body textarea{resize:vertical;min-height:70px}
+.ay-settings-card-body button{background:#342a1b;color:#f2d7a1;border:1px solid #715a33;border-radius:9px;padding:9px 13px}
+.ay-settings-card-body button:hover{background:#4a3820}
+.ay-settings-card-body small{color:#d0b781}
+.ay-settings-toggle{display:flex;align-items:center;gap:12px;padding:12px 0}
+.ay-settings-toggle input{accent-color:var(--ay-accent,#caa65b);width:18px;height:18px}
+.ay-settings-toggle small{margin-left:auto}
+.ay-settings-model-list{display:flex;flex-wrap:wrap;gap:6px}
+.ay-settings-command{display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid #322b20;padding:6px}
+.ay-settings-color{width:28px;height:28px;border-radius:50%!important;padding:0!important}
+.ay-settings-card{border-radius:var(--ay-radius,16px)}
+.ay-settings-link.active,.ay-settings-link:hover{color:var(--ay-accent,#caa65b)}
+.ay-settings-header h1,.ay-settings-card-title strong{color:var(--ay-accent,#caa65b)}
+.ay-chat{border-radius:var(--ay-radius,16px);font-size:var(--ay-font,14px)}
+.ay-thread{gap:var(--ay-density,14px)}
+.ay-msg.user{border-radius:var(--ay-radius,16px)}
+html[data-ay-theme="light"] .ay-settings-page{background:#f5f0e6;color:#30291c}
+html[data-ay-theme="light"] .ay-settings-nav,html[data-ay-theme="light"] .ay-settings-card{background:#fefbf5;color:#30291c}
+html[data-ay-theme="light"] .ay-settings-header{background:#ede3d0}
+html[data-ay-theme="light"] .ay-settings-card-title strong,html[data-ay-theme="light"] .ay-settings-row strong{color:#4d3a18}
+html[data-ay-theme="light"] .ay-settings-card-title small,html[data-ay-theme="light"] .ay-settings-row small{color:#6e624e}
+html[data-ay-theme="light"] .ay-settings-card-head{color:#30291c}
+@media(max-width:760px){.ay-settings-field{grid-template-columns:1fr}.ay-settings-field>strong,.ay-settings-field>small{grid-column:1}}
