@@ -221,7 +221,7 @@ applyUi();
 async function saveRemote(patch:Partial<RemoteSettings>&{apiKey?:string;clearApiKey?:boolean}){
  const response=await fetch("/api/settings",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(patch)});
  const data=await response.json() as RemoteSettings&{error?:string};if(!response.ok)throw Error(data.error||"Не удалось сохранить");
- remoteSettings=data;if(Object.hasOwn(patch,"model")){selectedModel=data.model;models=[...new Set([data.model,...models].filter(Boolean))];renderModels();}return data;
+ remoteSettings=data;if(Object.prototype.hasOwnProperty.call(patch,"model")){selectedModel=data.model;models=[...new Set([data.model,...models].filter(Boolean))];renderModels();}return data;
 }
 function textField(label:string,value:string,onSave:(value:string)=>Promise<unknown>,secret=false){
  const wrap=document.createElement("label");wrap.className="ay-settings-field";
