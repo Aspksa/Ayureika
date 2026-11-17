@@ -116,7 +116,15 @@ form.onsubmit = async e => {
       }
       if(buffer && type.includes("text/plain"))reply.content+=buffer;
       if(!reply.content)target.messages.pop();
-    } else { const data=await response.json() as {reply?:string;error?:string;confirmation?:{id:string;name:string;input:string}};if(data.confirmation){const t=data.confirmation;const approved=confirm("Модель запрашивает инструмент «"+t.name+"» с аргументом «"+t.input+"». Разрешить?");const check=await fetch("/api/tools/approve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,approve:approved}),signal:controller.signal});const outcome=await check.json() as {reply?:string;error?:string};if(!check.ok)throw Error(outcome.error||"Ошибка инструмента");data.reply=outcome.reply;}if(typeof data.reply!=="string")throw new Error(data.error||"Нет ответа");target.messages.push({role:"assistant",content:data.reply}); }
+    } else { const data=await response.json() as {reply?:string;error?:string;confirmation?:{id:string;name:string;input:string}};let steps=0;while(data.confirmation&&steps<3){
+      const t=data.confirmation;const approved=confirm("Модель запрашивает инструмент «"+t.name+"» с аргументом «"+t.input+"». Разрешить?");
+      const check=await fetch("/api/tools/approve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,approve:approved}),signal:controller.signal});
+      const outcome=await check.json() as {reply?:string;error?:string;confirmation?:{id:string;name:string;input:string}};
+      if(!check.ok)throw Error(outcome.error||"Ошибка инструмента");
+      data.reply=outcome.reply;data.confirmation=outcome.confirmation;steps++;
+    }
+    if(data.confirmation)throw Error("Превышен лимит инструментов");
+    if(typeof data.reply!=="string")throw new Error(data.error||"Нет ответа");target.messages.push({role:"assistant",content:data.reply}); }
     persist();if(current===target.id)paint();status.textContent="";
   } catch(error) { status.textContent=error instanceof Error && error.name==="AbortError"?"Запрос остановлен":error instanceof Error?error.message:"Ошибка подключения";persist(); }
   finally {active=null;avatar.classList.remove("busy");busyBadge.hidden=true;send.disabled=false;stop.hidden=true;input.focus();}
