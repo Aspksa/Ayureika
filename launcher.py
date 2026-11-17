@@ -130,7 +130,8 @@ def require_node():
 def check_sqlite():
     database = ROOT / "data" / "ayureika.db"
     database.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(database, timeout=5) as connection:
+    connection = sqlite3.connect(database, timeout=5)
+    try:
         status = connection.execute("PRAGMA quick_check").fetchone()[0]
         if status != "ok":
             raise RuntimeError("SQLite повреждена: " + status)
@@ -144,6 +145,8 @@ def check_sqlite():
             connection.execute("ROLLBACK TO ayureika_probe")
             connection.execute("RELEASE ayureika_probe")
 
+    finally:
+        connection.close()
 
 def free_port():
     with socket.socket() as sock:
