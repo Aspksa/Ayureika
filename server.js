@@ -180,7 +180,7 @@ async function handler(req,res){
     const c=load();if(!auth(c))return json(res,200,{ok:false,stage:"key",error:"Укажите API-ключ Cloud.ru"});
     if(!c.model)return json(res,200,{ok:false,stage:"model",error:"Выберите основную модель"});
     try{
-     const r=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify({model:c.model,messages:[{role:"user",content:"Ответь одним словом: OK"}],stream:false,max_tokens:16})});
+     const r=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify({model:c.model,messages:[{role:"user",content:"Ответь одним словом: OK"}],stream:false})});
      if(!r.ok)return json(res,200,{ok:false,stage:"chat",status:r.status,error:await cloudError(r)});
      const d=await r.json();const answer=d.choices?.[0]?.message?.content;
      if(typeof answer!=="string"||!answer.trim())return json(res,200,{ok:false,stage:"chat",error:"Cloud.ru ответил, но не вернул текст сообщения"});
