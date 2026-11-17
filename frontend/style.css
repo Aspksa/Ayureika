@@ -2,3 +2,32 @@ html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden;font-f
 .ay-avatar-settings{position:fixed;z-index:40;right:16px;top:16px;width:min(320px,calc(100vw - 32px));background:#14120e;border:1px solid #8b733e;border-radius:14px;padding:16px;box-shadow:0 12px 36px #000b;color:#eee}.ay-avatar-settings[hidden]{display:none}.ay-avatar-settings header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;color:#e2c47b}.ay-avatar-settings header button{background:transparent;border:0;color:inherit;font-size:24px}.ay-avatar-settings label{display:grid;grid-template-columns:1fr auto;gap:8px;margin:12px 0}.ay-avatar-settings input{grid-column:1/-1;width:100%;accent-color:#c9a85d}.ay-avatar:focus-visible{outline:3px solid #e2c47b;outline-offset:4px}@media(max-width:600px){.ay-avatar-settings{top:env(safe-area-inset-top,12px);right:12px}.ay-chat{padding-bottom:env(safe-area-inset-bottom,0px)}}
 
 .ay-avatar-settings .ay-avatar-upload{display:block;margin:18px 0 8px;padding:12px;border:1px solid #a68b51;border-radius:9px;background:#302718;color:#f2d78e;text-align:center;cursor:pointer}.ay-avatar-settings .ay-avatar-upload input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}.ay-avatar-settings .ay-avatar-upload:focus-within{outline:2px solid #f2d78e;outline-offset:3px}.ay-avatar-upload-status{font-size:12px;color:#d3ba82;line-height:1.4;min-height:1em}
+
+/* JUUNIBI-inspired chat workspace */
+.ay-chat{width:min(920px,calc(100vw - 36px));height:min(680px,calc(100dvh - 36px));flex-direction:row;min-width:0;min-height:0}
+.ay-chat.maximized{inset:0!important;width:100%!important;height:100dvh!important;border-radius:0}
+.ay-side{width:240px;flex:none;display:flex;flex-direction:column;gap:10px;padding:12px;background:#14120f;border-right:1px solid #403522;min-height:0}
+.ay-side>button,.ay-side>input{padding:9px 10px;border:1px solid #4b3e28;border-radius:9px;background:#211c15;color:#f0d89f;width:100%}
+.ay-chat-list{overflow-y:auto;min-height:0;display:flex;flex-direction:column;gap:4px}
+.ay-chat-row{display:flex;align-items:center;border-radius:8px}
+.ay-chat-row.active{background:#34291b}
+.ay-chat-row button{background:transparent;color:#e6d6b2;border:0;padding:8px 5px}
+.ay-chat-row .ay-chat-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;padding-left:10px}
+.ay-chat-main{display:flex;flex:1;min-width:0;min-height:0;flex-direction:column}
+.ay-head{cursor:move;flex-wrap:wrap;gap:8px}
+.ay-head select,.ay-head input{min-width:0;width:110px;max-width:135px;padding:6px;background:#211c15;border:1px solid #4b3e28;color:#e7d5aa;border-radius:7px;font-size:12px}
+.ay-head .ay-context{font-size:11px;color:#c6aa75;white-space:nowrap}
+.ay-head strong{flex:1;min-width:70px}
+.ay-resize{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,#a68b51 50%,#a68b51 60%,transparent 60%,transparent 70%,#a68b51 70%)}
+.ay-chat.maximized .ay-resize{display:none}
+.ay-avatar.dragging{transform:scale(1.12);box-shadow:0 0 28px #d8b25e88;cursor:grabbing}
+.ay-avatar.busy{box-shadow:0 0 0 3px #cfa95c66,0 0 24px #cfa95c}
+.ay-busy{position:absolute;inset:0;border-radius:50%;border:3px solid transparent;border-top-color:#ffe2a0;animation:ay-spin 1s linear infinite;pointer-events:none}
+.ay-busy[hidden]{display:none}
+@keyframes ay-spin{to{transform:rotate(360deg)}}
+.ay-msg pre{background:#171b22;border:1px solid #3b4655;padding:12px;border-radius:8px;overflow:auto;max-width:100%}
+.ay-msg code{font-family:Consolas,monospace;color:#e8bb75}
+.ay-msg pre code{color:#c4d9ef;white-space:pre}
+.ay-msg strong{color:#ffe2a0}
+.ay-msg{white-space:pre-wrap}
+@media(max-width:639px){.ay-chat{inset:0!important;width:100%!important;height:100dvh!important;border-radius:0}.ay-side{width:112px;padding:6px}.ay-side>button,.ay-side>input{font-size:11px}.ay-chat-row button{font-size:11px}.ay-chat-row button:not(.ay-chat-name){padding:4px 2px}.ay-head{cursor:default;padding:8px}.ay-head select,.ay-head input{max-width:95px}.ay-resize{display:none}.ay-thread{padding:12px}}
