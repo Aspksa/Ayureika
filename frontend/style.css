@@ -31,3 +31,5 @@ html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden;font-f
 .ay-msg strong{color:#ffe2a0}
 .ay-msg{white-space:pre-wrap}
 @media(max-width:639px){.ay-chat{inset:0!important;width:100%!important;height:100dvh!important;border-radius:0}.ay-side{width:112px;padding:6px}.ay-side>button,.ay-side>input{font-size:11px}.ay-chat-row button{font-size:11px}.ay-chat-row button:not(.ay-chat-name){padding:4px 2px}.ay-head{cursor:default;padding:8px}.ay-head select,.ay-head input{max-width:95px}.ay-resize{display:none}.ay-thread{padding:12px}}
+
+[hidden]{display:none!important}
