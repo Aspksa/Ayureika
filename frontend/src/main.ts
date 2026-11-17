@@ -2,9 +2,10 @@
 type Message = { role: "user" | "assistant"; content: string };
 const KEY = "ayureika:chat:v1";
 const POS = "ayureika:avatar:position";
+const PREFS = "ayureika:avatar:preferences";
 const history: Message[] = (() => { try { const v = JSON.parse(localStorage.getItem(KEY) || "[]"); return Array.isArray(v) ? v.filter((m: Message) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string").slice(-100) : []; } catch { return []; } })();
 const avatar = document.createElement("button");
-avatar.className = "ay-avatar"; avatar.type = "button"; avatar.title = "Открыть чат · перетащите для перемещения"; avatar.setAttribute("aria-label", "Открыть чат Ayureika");
+avatar.className = "ay-avatar"; avatar.style.setProperty("--avatar-size", "64px"); avatar.type = "button"; avatar.title = "Открыть чат · перетащите для перемещения"; avatar.setAttribute("aria-label", "Открыть чат Ayureika");
 const img = document.createElement("img"); img.src = "/assets/avatar.png"; img.alt = ""; img.draggable = false;
 const fallback = document.createElement("span"); fallback.textContent = "А"; fallback.className = "ay-fallback";
 img.onload = () => fallback.remove(); img.onerror = () => img.remove();
@@ -55,7 +56,43 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !panel.hid
 let pos: { x: number; y: number } = { x: 1, y: 1 };
 try { const p = JSON.parse(localStorage.getItem(POS) || "null"); if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) pos = { x: Math.max(0, Math.min(1, p.x)), y: Math.max(0, Math.min(1, p.y)) }; } catch { /* no saved position */ }
 const margin = 16;
-function place() { const w = Math.max(0, innerWidth - 64 - margin * 2), h = Math.max(0, innerHeight - 64 - margin * 2); avatar.style.left = margin + pos.x * w + "px"; avatar.style.top = margin + pos.y * h + "px"; }
+type AvatarPrefs = { size: number; opacity: number };
+const prefs: AvatarPrefs = { size: 64, opacity: 100 };
+try {
+  const saved = JSON.parse(localStorage.getItem(PREFS) || "null");
+  if (saved && Number.isFinite(saved.size) && Number.isFinite(saved.opacity)) {
+    prefs.size = Math.max(40, Math.min(160, saved.size));
+    prefs.opacity = Math.max(30, Math.min(100, saved.opacity));
+  }
+} catch { /* storage disabled */ }
+function applyPrefs() {
+  avatar.style.setProperty("--avatar-size", prefs.size + "px");
+  avatar.style.opacity = String(prefs.opacity / 100);
+}
+applyPrefs();
+const settings = document.createElement("section");
+settings.className = "ay-avatar-settings"; settings.hidden = true;
+settings.setAttribute("aria-label", "Настройки аватара");
+const settingsTitle = document.createElement("strong"); settingsTitle.textContent = "Настройки аватара";
+const settingsClose = document.createElement("button"); settingsClose.type = "button"; settingsClose.textContent = "×"; settingsClose.title = "Закрыть настройки";
+settingsClose.onclick = () => { settings.hidden = true; avatar.focus(); };
+const settingsHead = document.createElement("header"); settingsHead.append(settingsTitle, settingsClose);
+function setting(labelText: string, min: number, max: number, value: number, update: (v: number) => void) {
+  const label = document.createElement("label");
+  const name = document.createElement("span"); name.textContent = labelText;
+  const current = document.createElement("output"); current.textContent = String(value);
+  const range = document.createElement("input"); range.type = "range"; range.min = String(min); range.max = String(max); range.value = String(value);
+  range.addEventListener("input", () => { const v = Number(range.value); current.textContent = String(v); update(v); applyPrefs(); place(); try { localStorage.setItem(PREFS, JSON.stringify(prefs)); } catch {} });
+  label.append(name, current, range); settings.append(label);
+}
+settings.append(settingsHead);
+setting("Размер, пиксели", 40, 160, prefs.size, v => { prefs.size = v; });
+setting("Прозрачность, %", 30, 100, prefs.opacity, v => { prefs.opacity = v; });
+document.body.append(settings);
+avatar.addEventListener("contextmenu", e => { e.preventDefault(); settings.hidden = !settings.hidden; if (!settings.hidden) settingsClose.focus(); });
+avatar.addEventListener("keydown", e => { if (e.key === "F10" && e.shiftKey) { e.preventDefault(); settings.hidden = !settings.hidden; } });
+
+function place() { const w = Math.max(0, innerWidth - prefs.size - margin * 2), h = Math.max(0, innerHeight - prefs.size - margin * 2); avatar.style.left = margin + pos.x * w + "px"; avatar.style.top = margin + pos.y * h + "px"; }
 place(); window.addEventListener("resize", place);
 avatar.addEventListener("pointerdown", e => {
   if (e.button !== 0) return;
@@ -71,3 +108,4 @@ avatar.addEventListener("pointerdown", e => {
   avatar.addEventListener("pointermove", move); avatar.addEventListener("pointerup", up); avatar.addEventListener("pointercancel", up);
 });
 avatar.addEventListener("click", () => { if (avatar.dataset.dragged) { delete avatar.dataset.dragged; return; } openChat(); });
+
