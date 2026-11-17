@@ -42,3 +42,24 @@ test("memory statistics and safe backup import",()=>{
  assert.equal(memory.stats().count,before);
  assert.throws(()=>memory.importFacts(["", "valid"]),/Текст/);
 });
+
+test("memory revisions preserve versions and invalidate old vectors",()=>{
+ const entry=memory.remember("Версия тестового договора "+Date.now());
+ try{
+  memory.putVector(entry.id,"revision-test",[1,0]);
+  const updated=memory.revise(entry.id,"Новая редакция тестового договора");
+  assert.equal(updated.id,entry.id);
+  assert.equal(memory.versions(entry.id).at(0).action,"edited");
+  assert.equal(memory.versions(entry.id).at(1).action,"before_edit");
+  assert.ok(memory.missingVectors("revision-test",100).some(x=>x.id===entry.id));
+ }finally{memory.forget(entry.id);}
+});
+test("similarity review does not delete or merge facts automatically",()=>{
+ const stamp=String(Date.now());
+ const a=memory.remember("Служебный договор поставки проверка "+stamp+" действует до декабря");
+ const b=memory.remember("Служебный договор поставки проверка "+stamp+" действует до ноября");
+ try{
+  assert.ok(memory.reviews(100).some(x=>x.first_content.includes(stamp)&&x.second_content.includes(stamp)));
+  assert.ok(memory.search(stamp).length>=2);
+ }finally{memory.forget(a.id);memory.forget(b.id);}
+});
