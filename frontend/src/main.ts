@@ -101,7 +101,7 @@ form.onsubmit = async e => {
   persist();renderList();paint();input.value="";updateContext();
   const controller = new AbortController(); active=controller; avatar.classList.add("busy"); busyBadge.hidden=false; send.disabled=true;stop.hidden=false;status.textContent="Ожидание ответа…";
   try {
-    const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message,history:target.messages.slice(-20),model:modelSelect.value}),signal:controller.signal});
+    const streaming=!remoteSettings.toolsEnabled&&!/^запомни(?:\\s|:)/iu.test(message);const response=await fetch(streaming?"/api/chat/stream":"/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message,history:target.messages.slice(-20),model:modelSelect.value}),signal:controller.signal});
     if(!response.ok) { let err="Ошибка сервера: "+response.status; try { const body=await response.json() as {error?:string}; if(body.error)err=body.error; } catch {} throw new Error(err); }
     const type=response.headers.get("content-type")||"";
     if(type.includes("text/event-stream") || type.includes("application/x-ndjson") || type.includes("text/plain")) {
@@ -109,7 +109,7 @@ form.onsubmit = async e => {
       const reply:Message={role:"assistant",content:""}; target.messages.push(reply);
       const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="";
       while(true) { const {done,value}=await reader.read(); if(done)break; buffer+=decoder.decode(value,{stream:true});
-        if(type.includes("text/event-stream")) { const parts=buffer.split("\n\n");buffer=parts.pop()||"";for(const part of parts){for(const line of part.split("\n"))if(line.startsWith("data:")){const raw=line.slice(5).trim();if(raw==="[DONE]")continue;try{const obj=JSON.parse(raw) as {delta?:string;content?:string};reply.content+=obj.delta??obj.content??"";}catch{reply.content+=raw;}}} }
+        if(type.includes("text/event-stream")) { const parts=buffer.split("\n\n");buffer=parts.pop()||"";for(const part of parts){for(const line of part.split("\n"))if(line.startsWith("data:")){const raw=line.slice(5).trim();if(raw==="[DONE]")continue;try{const obj=JSON.parse(raw) as {delta?:string;content?:string;error?:string};if(obj.error)throw Error(obj.error);reply.content+=obj.delta??obj.content??"";}catch{reply.content+=raw;}}} }
         else if(type.includes("application/x-ndjson")) { const parts=buffer.split("\n");buffer=parts.pop()||"";for(const line of parts){try{const obj=JSON.parse(line) as {delta?:string};reply.content+=obj.delta||"";}catch{}} }
         else { reply.content+=buffer;buffer=""; }
         if(current===target.id)paint();
@@ -202,7 +202,7 @@ function settingsRow(label:string,detail:string):HTMLElement{
 const settingsCards=new Map<string,HTMLElement>();
 
 type RemoteSettings={endpoint:string;model:string;fallbackModel:string;instructions:string;memoryEnabled:boolean;toolsEnabled:boolean;quickCommands:{name:string;text:string}[];embeddingModel:string;keyConfigured:boolean};
-let remoteSettings:RemoteSettings={endpoint:"",model:"",fallbackModel:"",instructions:"",memoryEnabled:true,toolsEnabled:false,quickCommands:[],embeddingModel:"",keyConfigured:false};
+let remoteSettings:RemoteSettings={endpoint:"https://foundation-models.api.cloud.ru/v1",model:"",fallbackModel:"",instructions:"",memoryEnabled:true,toolsEnabled:false,quickCommands:[],embeddingModel:"",keyConfigured:false};
 const uiKey="ayureika:settings:ui:v1";
 type UiPrefs={theme:string;accent:string;radius:string;scale:string;font:string;density:string};
 let ui:UiPrefs={theme:"dark",accent:"#caa65b",radius:"16",scale:"100",font:"14",density:"normal"};
@@ -252,17 +252,17 @@ function addSettingsCard(sec:SettingsSection){
  collapsedIds=hide?[...new Set([...collapsedIds,sec.id])]:collapsedIds.filter(id=>id!==sec.id);
  try{localStorage.setItem(collapsedKey,JSON.stringify(collapsedIds));}catch{}};
  if(sec.id==="conn"){
-  body.append(textField("Адрес совместимого API Cloud.ru (HTTPS, до /v1)",remoteSettings.endpoint,v=>saveRemote({endpoint:v})));
+  body.append(textField("Адрес Cloud.ru API (HTTPS, включая /v1)",remoteSettings.endpoint,v=>saveRemote({endpoint:v})));
   body.append(textField("API-ключ (сохраняется на локальном сервере)",remoteSettings.keyConfigured?"":"",v=>saveRemote({apiKey:v}),true));
   body.append(settingsRow("Состояние ключа",remoteSettings.keyConfigured?"Ключ настроен":"Ключ не задан"));
   const check=button("Проверить подключение");const status=document.createElement("small");status.setAttribute("role","status");
-  check.onclick=async()=>{try{const r=await fetch("/api/health");const h=await r.json() as {server:boolean;endpointConfigured:boolean;keyConfigured:boolean;modelConfigured:boolean};status.textContent="Сервер: "+(h.server?"OK":"нет")+" · Адрес: "+(h.endpointConfigured?"OK":"нет")+" · Ключ: "+(h.keyConfigured?"OK":"нет")+" · Модель: "+(h.modelConfigured?"OK":"нет");}catch(e){status.textContent=String(e);}};
+  check.onclick=async()=>{try{status.textContent="Проверка доступа к Cloud.ru…";const r=await fetch("/api/cloud/check");const h=await r.json() as {ok:boolean;error?:string;models?:number;modelAvailable?:boolean};status.textContent=h.ok?"Cloud.ru доступен · Моделей: "+h.models+(h.modelAvailable?"":" · Выбранная модель не найдена"):"Ошибка подключения: "+(h.error||"неизвестная ошибка");}catch(e){status.textContent=String(e);}};
   body.append(check,status);
  }else if(sec.id==="model"){
   body.append(textField("Основная модель",remoteSettings.model,async v=>{await saveRemote({model:v});models=[...new Set([...models,v].filter(Boolean))];renderModels();}));
   body.append(textField("Запасная модель",remoteSettings.fallbackModel,v=>saveRemote({fallbackModel:v})));
   const refresh=button("Получить список моделей");const list=document.createElement("div");list.className="ay-settings-model-list";
-  refresh.onclick=async()=>{try{const r=await fetch("/api/cloud/models");const d=await r.json() as {models:string[]};models=[...new Set(d.models)];renderModels();list.replaceChildren(...models.map(m=>{const b=button(m);b.onclick=()=>{void saveRemote({model:m}).then(()=>{modelSelect.value=m;});};return b;}));}catch(e){list.textContent=String(e);}};
+  refresh.onclick=async()=>{try{const r=await fetch("/api/cloud/models");const d=await r.json() as {models:string[];warning?:string};if(d.warning)list.textContent=d.warning;models=[...new Set(d.models)];renderModels();list.replaceChildren(...models.map(m=>{const b=button(m);b.onclick=()=>{void saveRemote({model:m}).then(()=>{modelSelect.value=m;});};return b;}));}catch(e){list.textContent=String(e);}};
   body.append(refresh,list);
  }else if(sec.id==="persona"){
   const field=document.createElement("textarea");field.rows=6;field.value=remoteSettings.instructions;field.placeholder="Как должна отвечать Ayureika";
