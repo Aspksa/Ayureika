@@ -169,9 +169,9 @@ settingsPage.setAttribute("aria-label", "Настройки Ayureika");
 const settingsHeader = document.createElement("header"); settingsHeader.className = "ay-settings-header";
 const settingsHeading = document.createElement("div");
 const settingsH1 = document.createElement("h1"); settingsH1.textContent = "Настройки";
-const settingsHint = document.createElement("p"); settingsHint.textContent = "Управление Ayureika · чёрно-золотое оформление";
+const settingsHint = document.createElement("p"); settingsHint.textContent = "Все параметры в одном месте · изменения сохраняются";
 settingsHeading.append(settingsH1,settingsHint);
-const settingsExit = button("×", "Закрыть настройки");
+const settingsExit = button("×", "Закрыть настройки");settingsExit.className="ay-settings-exit";
 settingsHeader.append(settingsHeading,settingsExit);
 const settingsLayout = document.createElement("div"); settingsLayout.className = "ay-settings-layout";
 const settingsNav = document.createElement("aside"); settingsNav.className = "ay-settings-nav";
@@ -179,18 +179,20 @@ const settingsSearch = document.createElement("input"); settingsSearch.type = "s
 const settingsLinks = document.createElement("nav"); settingsLinks.setAttribute("aria-label","Разделы настроек");
 settingsNav.append(settingsSearch,settingsLinks);
 const settingsContent = document.createElement("main"); settingsContent.className = "ay-settings-content";
+const settingsEmpty=document.createElement("p");settingsEmpty.className="ay-settings-empty";settingsEmpty.textContent="Настройки не найдены. Попробуйте другой запрос.";settingsEmpty.hidden=true;
 settingsLayout.append(settingsNav,settingsContent);settingsPage.append(settingsHeader,settingsLayout);document.body.append(settingsPage);
 type SettingsSection = { id:string; title:string; icon:string; description:string; items:string[] };
 const settingsSections:SettingsSection[] = [
   {id:"conn",title:"Подключение",icon:"☁",description:"Подключение Cloud.ru и состояние сервера.",items:["Cloud.ru API","Статус соединения"]},
   {id:"model",title:"Модель",icon:"✦",description:"Модели, доступные в чате.",items:["Основная модель","Поиск модели"]},
   {id:"persona",title:"Инструкции",icon:"✎",description:"Пожелания к ответам помощницы.",items:["Стиль ответов","Инструкции"]},
-  {id:"memory",title:"Память",icon:"◈",description:"Параметры памяти и поиска.",items:["История диалогов","Смысловой поиск"]},
+  {id:"memory",title:"Память",icon:"◈",description:"Запоминание, источники, связи, индексация и журнал.",items:["Запоминание","Источники","Связи","Индексация","Журнал","Проверка фактов"]},
   {id:"tools",title:"Инструменты",icon:"⚒",description:"Возможности и доступные инструменты.",items:["Инструменты помощницы"]},
   {id:"quick",title:"Быстрые команды",icon:"⌘",description:"Короткие команды в чате.",items:["Команды через /"]},
-  {id:"look",title:"Внешний вид",icon:"◉",description:"Тема, цвет и оформление.",items:["Тема интерфейса","Цвет оформления","Скругление карточек","Масштаб интерфейса"]},
+  {id:"look",title:"Внешний вид",icon:"◉",description:"Тема, цвет, шрифт и масштаб.",items:["Тема","Цвет","Шрифт","Скругление","Масштаб"]},
+  {id:"avatar",title:"Аватар",icon:"狐",description:"Размер, прозрачность и изображение лисицы.",items:["Размер","Прозрачность","Загрузить изображение"]},
   {id:"chat",title:"Чат",icon:"▤",description:"Отображение сообщений и окна чата.",items:["Плотность сообщений","Размер текста","Окно чата"]},
-  {id:"data",title:"Данные",icon:"▣",description:"История и сохранённые данные.",items:["История чатов","Резервные копии"]},
+  {id:"data",title:"Данные",icon:"▣",description:"История чатов и резервные копии.",items:["История чатов","Полная копия SQLite","Импорт","Экспорт"]},
   {id:"diagnostics",title:"Диагностика",icon:"✚",description:"Сервер, Cloud.ru и база SQLite.",items:["Проверка состояния","Ошибки подключения"]},
   {id:"about",title:"О программе",icon:"ⓘ",description:"Информация о проекте.",items:["Ayureika","GitHub"]}
 ];
@@ -204,6 +206,7 @@ function settingsRow(label:string,detail:string):HTMLElement{
  row.append(text,hint);return row;
 }
 const settingsCards=new Map<string,HTMLElement>();
+let avatarControlsReady:HTMLElement|null=null;
 
 type RemoteSettings={endpoint:string;model:string;fallbackModel:string;instructions:string;memoryEnabled:boolean;toolsEnabled:boolean;quickCommands:{name:string;text:string}[];embeddingModel:string;streamEnabled:boolean;historyLimit:number;allowedTools:string[];keyConfigured:boolean};
 let remoteSettings:RemoteSettings={endpoint:"https://foundation-models.api.cloud.ru/v1",model:"",fallbackModel:"",instructions:"",memoryEnabled:true,toolsEnabled:false,quickCommands:[],embeddingModel:"",streamEnabled:true,historyLimit:20,allowedTools:["calculator","clock","memory_search"],keyConfigured:false};
@@ -249,7 +252,7 @@ function addSettingsCard(sec:SettingsSection){
  const description=document.createElement("small");description.textContent=sec.description;
  heading.append(name,description);
  const chevron=document.createElement("span");chevron.textContent="⌄";top.append(glyph,heading,chevron);
- const body=document.createElement("div");body.className="ay-settings-card-body";
+ const body=document.createElement("div");body.className="ay-settings-card-body";body.id="ay-settings-body-"+sec.id;top.setAttribute("aria-controls",body.id);
  const collapsed=collapsedIds.includes(sec.id);body.hidden=collapsed;card.classList.toggle("collapsed",collapsed);
  top.setAttribute("aria-expanded",String(!collapsed));
  top.onclick=()=>{const hide=!body.hidden;body.hidden=hide;card.classList.toggle("collapsed",hide);top.setAttribute("aria-expanded",String(!hide));
@@ -324,14 +327,16 @@ function addSettingsCard(sec:SettingsSection){
   body.append(choice("Шрифт",[["12","Компактный"],["14","Стандартный"],["17","Крупный"]],ui.font,v=>{ui.font=v;applyUi();}));
   body.append(choice("Скругление",[["4","Строгое"],["16","Обычное"],["26","Круглое"]],ui.radius,v=>{ui.radius=v;applyUi();}));
   body.append(choice("Масштаб",[["85","85%"],["100","100%"],["115","115%"]],ui.scale,v=>{ui.scale=v;applyUi();}));
+ }else if(sec.id==="avatar"){
+  body.append(settingsRow("Аватар","Размер, прозрачность и изображение доступны в этом разделе."));
  }else if(sec.id==="chat"){
   body.append(toggleSetting("Потоковые ответы (при отключённых инструментах)",remoteSettings.streamEnabled,v=>saveRemote({streamEnabled:v})));
   body.append(choice("Контекст истории",[["0","Без истории"],["5","5 сообщений"],["10","10 сообщений"],["20","20 сообщений"]],String(remoteSettings.historyLimit),v=>saveRemote({historyLimit:Number(v)})));
-  body.append(settingsRow("Остановка генерации","Кнопка «Стоп» отменяет текущий запрос. Уже полученный текст остаётся в чате."));
+
   body.append(choice("Плотность сообщений",[["compact","Компактная"],["normal","Обычная"]],ui.density,v=>{ui.density=v;applyUi();}));
   const reset=button("Сбросить положение окна");reset.onclick=()=>{try{localStorage.removeItem(FRAME_KEY);}catch{}panel.style.left="";panel.style.top="";panel.style.width="";panel.style.height="";panel.style.right="";panel.style.bottom="";};body.append(reset);
  }else if(sec.id==="data"){
-  const backup=button("Скачать копию чатов и оформления");backup.onclick=()=>downloadJson({kind:"ayureika-backup",version:1,chats,ui,commands:remoteSettings.quickCommands,instructions:remoteSettings.instructions});
+  const backup=button("Экспорт чатов и оформления");backup.onclick=()=>downloadJson({kind:"ayureika-backup",version:1,chats,ui,commands:remoteSettings.quickCommands,instructions:remoteSettings.instructions});
   const file=document.createElement("input");file.type="file";file.accept="application/json,.json";const status=document.createElement("small");
   file.onchange=async()=>{const f=file.files?.[0];if(!f)return;try{if(f.size>5e6)throw Error("Файл слишком большой");const d=JSON.parse(await f.text()) as {kind?:string;version?:number;chats?:Conversation[];ui?:Partial<UiPrefs>;commands?:RemoteSettings["quickCommands"];instructions?:string};
    if(d.kind!=="ayureika-backup"||d.version!==1||!Array.isArray(d.chats))throw Error("Неподходящий формат");
@@ -340,10 +345,10 @@ function addSettingsCard(sec:SettingsSection){
    if(d.ui){ui={...ui,...d.ui};applyUi();}if(Array.isArray(d.commands))await saveRemote({quickCommands:d.commands});if(typeof d.instructions==="string")await saveRemote({instructions:d.instructions});status.textContent="Восстановлено";
   }catch(e){status.textContent=String(e);}};
   const clear=button("Удалить всю историю чатов");clear.onclick=()=>{if(!confirm("Безвозвратно удалить все переписки?"))return;chats=[makeChat()];current=chats[0]!.id;persist();renderList();paint();};
-  const fullBackup=button("Полная копия SQLite: факты, векторы, версии, связи");fullBackup.onclick=async()=>{try{const r=await fetch("/api/data/full-export");if(!r.ok)throw Error("Не удалось экспортировать SQLite");downloadJson(await r.json());status.textContent="Полная копия создана. API-ключ не экспортируется.";}catch(e){status.textContent=String(e);}};
+  const fullBackup=button("Экспорт полной памяти SQLite");fullBackup.onclick=async()=>{try{const r=await fetch("/api/data/full-export");if(!r.ok)throw Error("Не удалось экспортировать SQLite");downloadJson(await r.json());status.textContent="Полная копия создана. API-ключ не экспортируется.";}catch(e){status.textContent=String(e);}};
   const fullFile=document.createElement("input");fullFile.type="file";fullFile.accept=".json,application/json";
-  const fullRestore=button("Восстановить полную копию SQLite");fullRestore.onclick=async()=>{const f=fullFile.files?.[0];if(!f)return;try{if(f.size>25e6)throw Error("Размер копии превышает 25 МБ");const data=JSON.parse(await f.text()) as {kind?:string;version?:number};if(data.kind!=="ayureika-sqlite-backup"||data.version!==2)throw Error("Неверный формат полной копии");if(!confirm("Добавить данные из полной копии SQLite? Существующие записи сохраняются."))return;const r=await fetch("/api/data/full-import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...data,confirm:true})});const d=await r.json() as {imported?:number;error?:string};if(!r.ok)throw Error(d.error||"Ошибка восстановления");status.textContent="Восстановление завершено. Записей в копии: "+d.imported;}catch(e){status.textContent=String(e);}};body.append(fullBackup,fullFile,fullRestore);
-  const memoryBackup=button("Скачать частичную копию памяти (до 100 фактов)");memoryBackup.onclick=async()=>{try{const r=await fetch("/api/data/export");if(!r.ok)throw Error("Не удалось получить данные сервера");downloadJson(await r.json());}catch(e){status.textContent=String(e);}};
+  const fullRestore=button("Импорт полной памяти SQLite");fullRestore.onclick=async()=>{const f=fullFile.files?.[0];if(!f)return;try{if(f.size>25e6)throw Error("Размер копии превышает 25 МБ");const data=JSON.parse(await f.text()) as {kind?:string;version?:number};if(data.kind!=="ayureika-sqlite-backup"||data.version!==2)throw Error("Неверный формат полной копии");if(!confirm("Добавить данные из полной копии SQLite? Существующие записи сохраняются."))return;const r=await fetch("/api/data/full-import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...data,confirm:true})});const d=await r.json() as {imported?:number;error?:string};if(!r.ok)throw Error(d.error||"Ошибка восстановления");status.textContent="Восстановление завершено. Записей в копии: "+d.imported;}catch(e){status.textContent=String(e);}};body.append(fullBackup,fullFile,fullRestore);
+  const memoryBackup=button("Экспорт совместимости (до 100 фактов)");memoryBackup.onclick=async()=>{try{const r=await fetch("/api/data/export");if(!r.ok)throw Error("Не удалось получить данные сервера");downloadJson(await r.json());}catch(e){status.textContent=String(e);}};
   const memoryFile=document.createElement("input");memoryFile.type="file";memoryFile.accept=".json,application/json";const importMemory=button("Восстановить память из файла");importMemory.onclick=async()=>{const f=memoryFile.files?.[0];if(!f)return;try{if(f.size>1e6)throw Error("Файл слишком большой");const data=JSON.parse(await f.text()) as {kind?:string;version?:number;facts?:string[]};if(data.kind!=="ayureika-server-backup"||data.version!==1||!Array.isArray(data.facts))throw Error("Неверный формат");if(!confirm("Добавить записи памяти из резервной копии?"))return;const r=await fetch("/api/data/import",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...data,confirm:true})});const result=await r.json() as {imported?:number;error?:string};if(!r.ok)throw Error(result.error||"Ошибка");status.textContent="Импортировано записей: "+result.imported+" · Настройки восстановлены (API-ключ не менялся)";}catch(e){status.textContent=String(e);}};
   body.append(memoryBackup,memoryFile,importMemory);
   body.append(backup,settingsRow("Импорт резервной копии","Выберите ранее сохранённый файл Ayureika"),file,status,clear);
@@ -360,9 +365,10 @@ function addSettingsCard(sec:SettingsSection){
 
  settingsLinks.append(nav);
 }
-let activeSettingsSection="conn";
+const SETTINGS_ACTIVE_KEY="ayureika:settings:active:v2";let activeSettingsSection=(()=>{try{const id=localStorage.getItem(SETTINGS_ACTIVE_KEY)||"conn";return settingsSections.some(x=>x.id===id)?id:"conn";}catch{return "conn";}})();
 function selectSettingsSection(id:string){
- activeSettingsSection=id;
+ activeSettingsSection=id;try{localStorage.setItem(SETTINGS_ACTIVE_KEY,id);}catch{}
+ settingsEmpty.hidden=true;
  for(const section of settingsSections){
   const card=settingsCards.get(section.id);
   if(card)card.hidden=section.id!==id;
@@ -376,7 +382,9 @@ function selectSettingsSection(id:string){
 function rebuildSettings(){
  settingsContent.replaceChildren();settingsLinks.replaceChildren();settingsCards.clear();
  for(const section of settingsSections)addSettingsCard(section);
+ if(typeof avatarControlsReady!=="undefined"&&avatarControlsReady){settingsCards.get("avatar")?.querySelector(".ay-settings-card-body")?.append(avatarControlsReady);}
  selectSettingsSection(activeSettingsSection);
+ settingsContent.append(settingsEmpty);
 }
 rebuildSettings();
 settingsSearch.oninput=()=>{
@@ -390,10 +398,10 @@ settingsSearch.oninput=()=>{
   if(nav)nav.hidden=!matches.some(x=>x.id===sec.id);
  }
  if(matches.length)selectSettingsSection(matches.some(x=>x.id===activeSettingsSection)?activeSettingsSection:matches[0]!.id);
- if(!matches.length){for(const card of settingsCards.values())card.hidden=true;}
+ if(!matches.length){for(const card of settingsCards.values())card.hidden=true;settingsEmpty.hidden=false;}else settingsEmpty.hidden=true;
 };
 async function showSettings(){try{const r=await fetch('/api/settings');if(r.ok){remoteSettings=await r.json() as RemoteSettings;rebuildSettings();settingsSearch.dispatchEvent(new Event("input"));}}catch{}settingsPage.hidden=false;panel.hidden=true;settingsSearch.focus();}
-function hideSettings(){settingsPage.hidden=true;}
+function hideSettings(){settingsPage.hidden=true;settingsSearch.value="";settingsSearch.dispatchEvent(new Event("input"));}
 settingsOpen.onclick=showSettings;settingsExit.onclick=hideSettings;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!settingsPage.hidden)hideSettings();if(e.ctrlKey&&e.key===","){e.preventDefault();showSettings();}});
 
@@ -415,13 +423,11 @@ function applyPrefs() {
   avatar.style.opacity = String(prefs.opacity / 100);
 }
 applyPrefs();
-const settings = document.createElement("section");
-settings.className = "ay-avatar-settings"; settings.hidden = true;
+const settings = document.createElement("div");
+settings.className = "ay-avatar-controls";
 settings.setAttribute("aria-label", "Настройки аватара");
 const settingsTitle = document.createElement("strong"); settingsTitle.textContent = "Настройки аватара";
-const settingsClose = document.createElement("button"); settingsClose.type = "button"; settingsClose.textContent = "×"; settingsClose.title = "Закрыть настройки";
-settingsClose.onclick = () => { settings.hidden = true; avatar.focus(); };
-const settingsHead = document.createElement("header"); settingsHead.append(settingsTitle, settingsClose);
+const settingsHead = document.createElement("header"); settingsHead.append(settingsTitle);
 function setting(labelText: string, min: number, max: number, value: number, update: (v: number) => void) {
   const label = document.createElement("label");
   const name = document.createElement("span"); name.textContent = labelText;
@@ -466,9 +472,10 @@ upload.addEventListener("change", async () => {
     uploadStatus.textContent = "Аватар сохранён в этом браузере.";
   } catch (error) { uploadStatus.textContent = error instanceof Error ? error.message : "Не удалось сохранить изображение"; }
 });
-document.body.append(settings);
-avatar.addEventListener("contextmenu", e => { e.preventDefault(); settings.hidden = !settings.hidden; if (!settings.hidden) settingsClose.focus(); });
-avatar.addEventListener("keydown", e => { if (e.key === "F10" && e.shiftKey) { e.preventDefault(); settings.hidden = !settings.hidden; } });
+avatarControlsReady=settings;
+const avatarSettingsCard=settingsCards.get("avatar");const avatarSettingsBody=avatarSettingsCard?.querySelector(".ay-settings-card-body");avatarSettingsBody?.append(settings);
+avatar.addEventListener("contextmenu", e => { e.preventDefault();selectSettingsSection("avatar");void showSettings(); });
+avatar.addEventListener("keydown", e => { if (e.key === "F10" && e.shiftKey) { e.preventDefault();selectSettingsSection("avatar");void showSettings(); } });
 
 function place() { const w = Math.max(0, innerWidth - prefs.size - margin * 2), h = Math.max(0, innerHeight - prefs.size - margin * 2); avatar.style.left = margin + pos.x * w + "px"; avatar.style.top = margin + pos.y * h + "px"; }
 place(); window.addEventListener("resize", place);
