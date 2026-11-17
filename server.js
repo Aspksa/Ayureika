@@ -1,4 +1,5 @@
 const http=require("node:http");
+const memory=require("./memory");
 const fs=require("node:fs");
 const path=require("node:path");
 const root=path.resolve(__dirname,"frontend");
@@ -31,6 +32,12 @@ async function handler(req,res){
     if(c.endpoint)baseUrl(c.endpoint);
     save(c);return json(res,200,publicConfig(c));
    }
+   if(pathname==="/api/memory"&&req.method==="GET")return json(res,200,{items:memory.list()});
+   if(pathname==="/api/memory"&&req.method==="POST"){const c=load();if(!c.memoryEnabled)return json(res,403,{error:"Память отключена"});const input=await body(req);return json(res,200,memory.remember(input.content));}
+   if(pathname==="/api/memory/search"&&req.method==="POST"){const c=load();if(!c.memoryEnabled)return json(res,403,{error:"Память отключена"});const input=await body(req);return json(res,200,{items:memory.search(input.query)});}
+   if(pathname==="/api/memory/delete"&&req.method==="POST"){const input=await body(req);if(input.confirm!==true)return json(res,403,{error:"Требуется подтверждение"});return json(res,200,{deleted:memory.forget(input.id)});}
+   if(pathname==="/api/tools"&&req.method==="GET")return json(res,200,{available:["calculator","clock","memory_search"],audit:memory.logs()});
+   if(pathname==="/api/tools/run"&&req.method==="POST"){const c=load();if(!c.toolsEnabled)return json(res,403,{error:"Инструменты отключены"});const input=await body(req);return json(res,200,memory.execute(input.name,input.input,input.confirm===true));}
    if(pathname==="/api/cloud/models"&&req.method==="GET"){
     const c=load();let models=(process.env.CLOUD_RU_MODELS||"").split(",").map(s=>s.trim()).filter(Boolean);
     if(c.endpoint&&auth(c)){try{const upstream=await remote(c,"/models");if(upstream.ok){const d=await upstream.json();if(Array.isArray(d.data))models=[...new Set([...models,...d.data.map(x=>x.id).filter(x=>typeof x==="string")])];}}catch{}}
@@ -42,6 +49,7 @@ async function handler(req,res){
     const input=await body(req);if(typeof input.message!=="string"||input.message.length>30000)return json(res,400,{error:"Недопустимое сообщение"});
     const messages=[];if(c.instructions)messages.push({role:"system",content:c.instructions});
     if(c.memoryEnabled&&Array.isArray(input.history))for(const m of input.history.slice(-20)){if(["user","assistant"].includes(m.role)&&typeof m.content==="string")messages.push({role:m.role,content:m.content.slice(0,30000)});}
+    if(c.memoryEnabled){const remembered=memory.search(input.message.slice(0,150),5);if(remembered.length)messages.unshift({role:"system",content:"Подтверждённые записи памяти пользователя:\\n"+remembered.map(x=>"- "+x.content).join("\\n")});}
     if(messages.at(-1)?.role!=="user"||messages.at(-1)?.content!==input.message)messages.push({role:"user",content:input.message});
     let upstream;let chosen=typeof input.model==="string"&&input.model?input.model:c.model;
     const payload=model=>({model,messages,stream:false});
