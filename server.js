@@ -7,6 +7,12 @@ http.createServer((req, res) => {
   let pathname;
   try { pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname); }
   catch { res.writeHead(400); res.end(); return; }
+  if (pathname === "/api/cloud/models") {
+    const models = (process.env.CLOUD_RU_MODELS || "").split(",").map(s => s.trim()).filter(Boolean);
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({ models, configured: models.length > 0 }));
+    return;
+  }
   if (pathname === "/api/chat") {
     res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify({ error: "Чат Ayureika готов, но модель ИИ пока не подключена." }));
