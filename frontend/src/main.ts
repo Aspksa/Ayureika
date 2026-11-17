@@ -4,12 +4,14 @@ type Message = { role: "user" | "assistant"; content: string };
 const KEY = "ayureika:chat:v1";
 const POS = "ayureika:avatar:position";
 const PREFS = "ayureika:avatar:preferences";
+const AVATAR_IMAGE = "ayureika:avatar:image:v1";
 const history: Message[] = (() => { try { const v = JSON.parse(localStorage.getItem(KEY) || "[]"); return Array.isArray(v) ? v.filter((m: Message) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string").slice(-100) : []; } catch { return []; } })();
 const avatar = document.createElement("button");
 avatar.className = "ay-avatar"; avatar.style.setProperty("--avatar-size", "64px"); avatar.type = "button"; avatar.title = "Открыть чат · перетащите для перемещения"; avatar.setAttribute("aria-label", "Открыть чат Ayureika");
 const img = document.createElement("img"); img.src = "/assets/avatar.png"; img.alt = ""; img.draggable = false;
 const fallback = document.createElement("span"); fallback.textContent = "А"; fallback.className = "ay-fallback";
-img.onload = () => fallback.remove(); img.onerror = () => img.remove();
+img.onload = () => { fallback.hidden = true; }; img.onerror = () => { fallback.hidden = false; img.hidden = true; };
+try { const savedImage = localStorage.getItem(AVATAR_IMAGE); if (savedImage && /^data:image\/(png|jpeg|webp);base64,/.test(savedImage)) img.src = savedImage; } catch { /* storage unavailable */ }
 avatar.append(fallback, img);
 const panel = document.createElement("section"); panel.className = "ay-chat"; panel.hidden = true; panel.setAttribute("aria-label", "Чат Ayureika");
 const head = document.createElement("header"); head.className = "ay-head";
@@ -89,6 +91,39 @@ function setting(labelText: string, min: number, max: number, value: number, upd
 settings.append(settingsHead);
 setting("Размер, пиксели", 40, 160, prefs.size, v => { prefs.size = v; });
 setting("Прозрачность, %", 30, 100, prefs.opacity, v => { prefs.opacity = v; });
+const uploadLabel = document.createElement("label");
+uploadLabel.className = "ay-avatar-upload";
+uploadLabel.textContent = "Загрузить изображение";
+const upload = document.createElement("input");
+upload.type = "file"; upload.accept = "image/png,image/jpeg,image/webp";
+upload.setAttribute("aria-label", "Загрузить аватар PNG, JPG или WebP");
+uploadLabel.append(upload); settings.append(uploadLabel);
+const uploadStatus = document.createElement("p");
+uploadStatus.className = "ay-avatar-upload-status"; uploadStatus.setAttribute("role", "status");
+settings.append(uploadStatus);
+upload.addEventListener("change", async () => {
+  const file = upload.files?.[0]; if (!file) return;
+  upload.value = "";
+  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) { uploadStatus.textContent = "Выберите PNG, JPG или WebP."; return; }
+  if (file.size > 2 * 1024 * 1024) { uploadStatus.textContent = "Файл слишком большой. Максимум 2 МБ."; return; }
+  try {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Не удалось прочитать файл"));
+      reader.onerror = () => reject(new Error("Не удалось прочитать файл"));
+      reader.readAsDataURL(file);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const check = new Image();
+      check.onload = () => resolve();
+      check.onerror = () => reject(new Error("Файл не является корректным изображением"));
+      check.src = dataUrl;
+    });
+    localStorage.setItem(AVATAR_IMAGE, dataUrl);
+    img.hidden = false; img.src = dataUrl;
+    uploadStatus.textContent = "Аватар сохранён в этом браузере.";
+  } catch (error) { uploadStatus.textContent = error instanceof Error ? error.message : "Не удалось сохранить изображение"; }
+});
 document.body.append(settings);
 avatar.addEventListener("contextmenu", e => { e.preventDefault(); settings.hidden = !settings.hidden; if (!settings.hidden) settingsClose.focus(); });
 avatar.addEventListener("keydown", e => { if (e.key === "F10" && e.shiftKey) { e.preventDefault(); settings.hidden = !settings.hidden; } });
@@ -102,7 +137,7 @@ avatar.addEventListener("pointerdown", e => {
   avatar.setPointerCapture(e.pointerId);
   const move = (m: PointerEvent) => {
     if (!moved && Math.hypot(m.clientX - sx, m.clientY - sy) < 6) return;
-    moved = true; const w = Math.max(1, innerWidth - 64 - margin * 2), h = Math.max(1, innerHeight - 64 - margin * 2);
+    moved = true; const w = Math.max(1, innerWidth - prefs.size - margin * 2), h = Math.max(1, innerHeight - prefs.size - margin * 2);
     pos = { x: Math.max(0, Math.min(1, (m.clientX - dx - margin) / w)), y: Math.max(0, Math.min(1, (m.clientY - dy - margin) / h)) }; place();
   };
   const up = () => { avatar.removeEventListener("pointermove", move); avatar.removeEventListener("pointerup", up); avatar.removeEventListener("pointercancel", up); if (moved) { avatar.dataset.dragged = "yes"; try { localStorage.setItem(POS, JSON.stringify(pos)); } catch {} } };
