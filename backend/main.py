@@ -1,16 +1,11 @@
-"""Ayureika: минимальный API-сервер на стандартной библиотеке Python."""
+"""Минимальный Python API Ayureika."""
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 import sqlite3
+import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 DATABASE = ROOT / "data" / "ayureika.db"
-
-
-def initialize_database():
-    DATABASE.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(DATABASE):
-        pass
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -27,5 +22,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    initialize_database()
-    HTTPServer(("127.0.0.1", 8765), Handler).serve_forever()
+    DATABASE.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(DATABASE):
+        pass
+    HTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()
