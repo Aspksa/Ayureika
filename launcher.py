@@ -21,6 +21,43 @@ logging.basicConfig(filename=LOG_DIR / "startup.log", level=logging.INFO,
 LOG = logging.getLogger("ayureika")
 HIDDEN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 PROCESSES = []
+JOB_HANDLE = None
+
+
+def ensure_windows_job():
+    global JOB_HANDLE
+    if os.name != 'nt' or JOB_HANDLE:
+        return
+    from ctypes import wintypes
+    class BASIC_LIMIT(ctypes.Structure):
+        _fields_ = [('PerProcessUserTimeLimit', ctypes.c_longlong),
+                    ('PerJobUserTimeLimit', ctypes.c_longlong),
+                    ('LimitFlags', wintypes.DWORD),
+                    ('MinimumWorkingSetSize', ctypes.c_size_t),
+                    ('MaximumWorkingSetSize', ctypes.c_size_t),
+                    ('ActiveProcessLimit', wintypes.DWORD),
+                    ('Affinity', ctypes.c_size_t),
+                    ('PriorityClass', wintypes.DWORD),
+                    ('SchedulingClass', wintypes.DWORD)]
+    class IO_COUNTERS(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_ulonglong) for name in ('ReadOperationCount', 'WriteOperationCount', 'OtherOperationCount', 'ReadTransferCount', 'WriteTransferCount', 'OtherTransferCount')]
+    class EXTENDED_LIMIT(ctypes.Structure):
+        _fields_ = [('BasicLimitInformation', BASIC_LIMIT), ('IoInfo', IO_COUNTERS),
+                    ('ProcessMemoryLimit', ctypes.c_size_t), ('JobMemoryLimit', ctypes.c_size_t),
+                    ('PeakProcessMemoryUsed', ctypes.c_size_t), ('PeakJobMemoryUsed', ctypes.c_size_t)]
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.CreateJobObjectW.restype = ctypes.c_void_p
+    kernel.SetInformationJobObject.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    handle = kernel.CreateJobObjectW(None, None)
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    limits = EXTENDED_LIMIT()
+    limits.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    if not kernel.SetInformationJobObject(handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
+        kernel.CloseHandle(ctypes.c_void_p(handle))
+        raise ctypes.WinError(ctypes.get_last_error())
+    JOB_HANDLE = handle
+
 
 
 def run(command):
@@ -124,6 +161,14 @@ def launch(command, name):
         proc = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.DEVNULL,
                                 stdout=output, stderr=subprocess.STDOUT,
                                 creationflags=HIDDEN)
+    if os.name == 'nt':
+        ensure_windows_job()
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        if not kernel.AssignProcessToJobObject(ctypes.c_void_p(JOB_HANDLE), ctypes.c_void_p(int(proc._handle))):
+            proc.terminate()
+            proc.wait()
+            raise ctypes.WinError(ctypes.get_last_error())
     PROCESSES.append(proc)
     return proc
 
@@ -195,9 +240,9 @@ def main():
             print("Установка TypeScript...")
             npm_cli = Path(node).with_name("node_modules") / "npm" / "bin" / "npm-cli.js"
             if npm_cli.is_file():
-                run([node, str(npm_cli), "install", "--no-audit", "--no-fund"])
+                run([node, str(npm_cli), "ci", "--no-audit", "--no-fund"])
             else:
-                run([npm, "install", "--no-audit", "--no-fund"])
+                run([npm, "ci", "--no-audit", "--no-fund"])
         run([node, str(tsc), "--project", "tsconfig.json"])
         api, api_port, body = start_with_retry(
             [sys.executable, str(ROOT / "backend" / "main.py")], "/api/status", "api.log")
@@ -215,6 +260,8 @@ def main():
         raise RuntimeError("Один из серверов остановился")
     finally:
         stop_all()
+        if JOB_HANDLE:
+            ctypes.WinDLL('kernel32').CloseHandle(ctypes.c_void_p(JOB_HANDLE))
         if mutex:
             ctypes.WinDLL("kernel32").CloseHandle(ctypes.c_void_p(mutex))
 
