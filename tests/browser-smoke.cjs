@@ -29,7 +29,7 @@ async function run(){
  await evaluate("document.querySelector('.ay-avatar').click()");
  assert.equal(await evaluate("document.querySelector('.ay-chat').hidden"),false);
  await evaluate("document.querySelector('.ay-head button[title=\"Настройки Ayureika\"]').click()");
- assert.equal(await evaluate("document.querySelector('.ay-settings-page').hidden"),false);
+ await waitFor(()=>evaluate("document.querySelector('.ay-settings-page').hidden===false"));
  assert.ok(await evaluate("document.querySelectorAll('.ay-settings-link').length>=5"));
  await cmd("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
  assert.ok(await evaluate("document.querySelector('.ay-settings-layout').getBoundingClientRect().width<=390"));
