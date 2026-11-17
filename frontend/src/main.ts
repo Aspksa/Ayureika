@@ -1,3 +1,4 @@
+(() => {
 // Ayureika: avatar and chat adapted from JUUNIBI, without its unrelated modules.
 type Message = { role: "user" | "assistant"; content: string };
 const KEY = "ayureika:chat:v1";
@@ -109,3 +110,5 @@ avatar.addEventListener("pointerdown", e => {
 });
 avatar.addEventListener("click", () => { if (avatar.dataset.dragged) { delete avatar.dataset.dragged; return; } openChat(); });
 
+
+})();
