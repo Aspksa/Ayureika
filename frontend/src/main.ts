@@ -273,10 +273,13 @@ function addSettingsCard(sec:SettingsSection){
  }else if(sec.id==="memory"){
   body.append(toggleSetting("Использовать память и историю как контекст",remoteSettings.memoryEnabled,v=>saveRemote({memoryEnabled:v})));
   body.append(textField("Модель Cloud.ru embeddings",remoteSettings.embeddingModel||"",v=>saveRemote({embeddingModel:v})));
+  const review=button("Проверить похожие записи и противоречия");const reviewList=document.createElement("div");reviewList.className="ay-settings-model-list";
+  review.onclick=async()=>{try{const r=await fetch("/api/memory/reviews");const d=await r.json() as {items:{id:number;kind:string;first_content:string;second_content:string}[]};reviewList.replaceChildren(...d.items.map(item=>{const row=document.createElement("div");row.className="ay-settings-command";const label=document.createElement("span");label.textContent=(item.kind==="similar"?"Похожие записи":"Возможное противоречие")+" · "+item.first_content+" / "+item.second_content;const dismiss=button("Проверено");dismiss.onclick=async()=>{if(!confirm("Пометить пару как проверенную, не изменяя факты?"))return;await fetch("/api/memory/reviews",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:item.id,status:"reviewed",confirm:true})});review.click();};row.append(label,dismiss);return row;}));if(!d.items.length)reviewList.textContent="Нет записей на проверку";}catch(e){reviewList.textContent=String(e);}};body.append(review,reviewList);
   const stats=button("Проверить состояние SQLite");const statsLabel=document.createElement("small");stats.onclick=async()=>{try{const r=await fetch("/api/memory/stats");const d=await r.json() as {count:number;indexed:number;audits:number};if(!r.ok)throw Error("База недоступна");statsLabel.textContent="Записей: "+d.count+" · Векторов: "+d.indexed+" · Операций: "+d.audits;}catch(e){statsLabel.textContent=String(e);}};body.append(stats,statsLabel);
   const reindex=button("Индексировать память");const indexing=document.createElement("small");
   reindex.onclick=async()=>{reindex.disabled=true;indexing.textContent="Индексация…";try{const r=await fetch("/api/memory/reindex",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});const d=await r.json() as {indexed?:number;remaining?:boolean;error?:string};indexing.textContent=r.ok?"Проиндексировано: "+d.indexed+(d.remaining?" · Есть ещё записи":" · Готово"):d.error||"Ошибка";}catch(e){indexing.textContent=String(e);}finally{reindex.disabled=false;}};
   body.append(reindex,indexing);
+  const versionsInput=document.createElement("input");versionsInput.placeholder="ID записи для просмотра версий";const versionsButton=button("История изменений");const versionsOutput=document.createElement("pre");versionsButton.onclick=async()=>{try{const r=await fetch("/api/memory/versions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:versionsInput.value})});const d=await r.json() as {items?:{created_at:string;action:string;content:string}[];error?:string};versionsOutput.textContent=d.items?.map(x=>x.created_at+" · "+x.action+" · "+x.content).join("\n")||d.error||"История пуста";}catch(e){versionsOutput.textContent=String(e);}};body.append(versionsInput,versionsButton,versionsOutput);
   const note=document.createElement("small");note.textContent="SQLite: защита от дубликатов, смысловой поиск через embeddings при заданной модели; без неё поиск по словам.";
   const input=document.createElement("textarea");input.rows=3;input.placeholder="Запись, которую Ayureika должна помнить";
   const save=button("Запомнить");const searchInput=document.createElement("input");searchInput.placeholder="Поиск по памяти";
@@ -339,7 +342,7 @@ function addSettingsCard(sec:SettingsSection){
   body.append(link,settingsRow("Горячие клавиши","Ctrl+, — настройки · Escape — закрыть"));
  }
  card.append(top,body);settingsContent.append(card);settingsCards.set(sec.id,card);
- const nav=button(sec.icon+"  "+sec.title);nav.className="ay-settings-link";nav.dataset.section=sec.id;
+ const nav=button(sec.icon+"  "+sec.title);nav.setAttribute("aria-label",sec.title);nav.className="ay-settings-link";nav.dataset.section=sec.id;
  nav.onclick=()=>{if(body.hidden)top.click();card.scrollIntoView({behavior:"smooth",block:"start"});settingsLinks.querySelectorAll("button").forEach(b=>b.classList.toggle("active",b===nav));};
  settingsLinks.append(nav);
 }
