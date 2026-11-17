@@ -12,16 +12,31 @@ foreach ($exe in @('python.exe','python3.exe')) {
   $command = Get-Command $exe -ErrorAction SilentlyContinue
   if ($command) { $paths.Add($command.Source) }
 }
+$selected = $null
 foreach ($exe in @($paths | Select-Object -Unique)) {
   try {
     $version = & $exe -c 'import sys; print(".".join(map(str,sys.version_info[:3]))); sys.exit(0 if sys.version_info >= (3,9) else 1)' 2>&1
     if ($LASTEXITCODE -eq 0) {
       Write-Host "Python OK: $exe ($version)"
-      & $exe (Join-Path $root 'launcher.py')
-      exit $LASTEXITCODE
+      $selected = $exe
+      break
     }
     Write-Host "Python rejected: $exe ($version)"
-  } catch { Write-Host "Python broken: $exe ($_) " }
+  } catch {
+    Write-Host "Python broken: $exe ($_)"
+  }
+}
+if ($selected) {
+  Write-Host "Starting Ayureika with $selected"
+  try {
+    & $selected (Join-Path $root 'launcher.py')
+    $code = $LASTEXITCODE
+    Write-Host "Ayureika exited with code $code"
+    exit $code
+  } catch {
+    Write-Host "Ayureika launcher failed: $_"
+    exit 1
+  }
 }
 Write-Host 'No working Python 3.9+ found.'
 $winget = Get-Command winget -ErrorAction SilentlyContinue
