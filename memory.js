@@ -17,7 +17,7 @@ function normalize(value){if(typeof value!=="string")throw Error("Ожидает
 function remember(value){const content=normalize(value);const id=crypto.createHash("sha256").update(content.toLocaleLowerCase("ru")).digest("hex");insert.run(id,content);return {id,content};}
 function search(query,limit=10){const q=normalize(query).replace(/[\\%_]/g,"\\$&");return searchStmt.all("%"+q+"%",Math.min(30,Math.max(1,Number(limit)||10)));}
 function relevant(query,limit=5){
- const words=[...new Set(normalize(query).toLocaleLowerCase("ru").match(/[\\p{L}\\p{N}]{3,}/gu)||[])].slice(0,12);
+ const words=[...new Set(normalize(query).toLocaleLowerCase("ru").match(/[\p{L}\p{N}]{3,}/gu)||[])].slice(0,12);
  if(!words.length)return [];
  const candidates=listStmt.all(100);
  return candidates.map(row=>{const hay=row.content.toLocaleLowerCase("ru");const score=words.reduce((n,w)=>n+(hay.includes(w)?1:0),0);return {...row,score};})
@@ -25,7 +25,7 @@ function relevant(query,limit=5){
 }
 function extractExplicit(message){
  if(typeof message!=="string")return null;
- const match=message.trim().match(/^(?:запомни(?:\\s+что)?|remember)\\s*[:：]?\\s+([\\s\\S]{1,4000})$/iu);
+ const match=message.trim().match(/^(?:запомни(?:\s+что)?|remember)\s*[:：]?\s+([\s\S]{1,4000})$/iu);
  return match?match[1].trim():null;
 }
 function count(){return db.prepare("SELECT COUNT(*) AS total FROM memories").get().total;}
