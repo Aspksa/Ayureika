@@ -3,32 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b0b0d">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0b0d'/%3E%3Ctext x='32' y='45' font-size='40' text-anchor='middle' fill='%23d8b66a'%3EA%3C/text%3E%3C/svg%3E">
-  <title>Ayureika</title>
+  <meta name="theme-color" content="#000000">
+  <title></title>
   <link rel="stylesheet" href="/style.css">
 </head>
-<body>
-  <main class="layout">
-    <section class="brain" aria-label="Визуализация">
-      <canvas id="surface" aria-label="Область визуализации"></canvas>
-      <div class="brain-label">AYUREIKA <span>· визуализация</span></div>
-    </section>
-    <aside class="panel">
-      <header><h1>AYUREIKA</h1><p>Локальный интерфейс</p></header>
-      <div class="status" id="status" role="status">Проверка интерфейса…</div>
-      <div class="messages" id="messages" aria-live="polite"><p>Интерфейс загружен. Подключение чата пока не реализовано.</p></div>
-      <footer><span>TypeScript · Canvas · SQLite</span></footer>
-    </aside>
-  </main>
-  <div id="error" role="alert" hidden></div>
-  <script src="/build/main.js" defer></script>
-  <script>
-    window.addEventListener('error', function(event) {
-      const el = document.getElementById('error');
-      el.hidden = false;
-      el.textContent = 'Ошибка интерфейса: ' + event.message;
-    });
-  </script>
-</body>
+<body></body>
 </html>
