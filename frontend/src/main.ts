@@ -261,11 +261,25 @@ function addSettingsCard(sec:SettingsSection){
   const save=button("Сохранить инструкции");const status=document.createElement("small");save.onclick=()=>{void saveRemote({instructions:field.value}).then(()=>{status.textContent="Сохранено";}).catch(e=>{status.textContent=String(e);});};
   body.append(field,save,status);
  }else if(sec.id==="memory"){
-  body.append(toggleSetting("Использовать историю сообщений как контекст",remoteSettings.memoryEnabled,v=>saveRemote({memoryEnabled:v})));
-  body.append(settingsRow("Хранилище истории","Диалоги сохраняются локально в браузере. Семантический поиск пока не поддерживается."));
+  body.append(toggleSetting("Использовать память и историю как контекст",remoteSettings.memoryEnabled,v=>saveRemote({memoryEnabled:v})));
+  const note=document.createElement("small");note.textContent="SQLite: записи с защитой от дубликатов. Поиск по тексту; векторный поиск пока не подключён.";
+  const input=document.createElement("textarea");input.rows=3;input.placeholder="Запись, которую Ayureika должна помнить";
+  const save=button("Запомнить");const searchInput=document.createElement("input");searchInput.placeholder="Поиск по памяти";
+  const searchButton=button("Найти");const list=document.createElement("div");list.className="ay-settings-model-list";const status=document.createElement("small");
+  const request=async(path:string,data:unknown)=>{const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});const v=await r.json() as {error?:string;items?:{id:string;content:string}[]};if(!r.ok)throw Error(v.error||"Ошибка памяти");return v;};
+  const render=async(items?:{id:string;content:string}[])=>{try{const rows=items||(await (await fetch("/api/memory")).json() as {items:{id:string;content:string}[]}).items;list.replaceChildren(...rows.map(item=>{const row=document.createElement("div");row.className="ay-settings-command";const label=document.createElement("span");label.textContent=item.content;const del=button("Удалить");del.onclick=async()=>{if(!confirm("Удалить эту запись памяти?"))return;try{await request("/api/memory/delete",{id:item.id,confirm:true});await render();}catch(e){status.textContent=String(e);}};row.append(label,del);return row;}));}catch(e){status.textContent=String(e);}};
+  save.onclick=async()=>{try{await request("/api/memory",{content:input.value});input.value="";await render();status.textContent="Сохранено";}catch(e){status.textContent=String(e);}};
+  searchButton.onclick=async()=>{try{const data=await request("/api/memory/search",{query:searchInput.value});await render(data.items||[]);}catch(e){status.textContent=String(e);}};
+  const all=button("Показать все записи");all.onclick=()=>{void render();};
+  body.append(note,input,save,searchInput,searchButton,all,list,status);void render();
  }else if(sec.id==="tools"){
   body.append(toggleSetting("Разрешить инструменты",remoteSettings.toolsEnabled,v=>saveRemote({toolsEnabled:v})));
-  body.append(settingsRow("Доступность","Встроенных инструментов вызова функций пока нет. Переключатель сохраняет разрешение на будущее."));
+  body.append(settingsRow("Безопасные инструменты","Калькулятор, часы и поиск в памяти. Каждый запуск требует подтверждения. Модель пока не вызывает инструменты самостоятельно."));
+  const select=document.createElement("select");for(const [v,label] of [["calculator","Калькулятор"],["clock","Текущее время UTC"],["memory_search","Поиск в памяти"]]){const opt=document.createElement("option");opt.value=v;opt.textContent=label;select.append(opt);}
+  const input=document.createElement("input");input.placeholder="Выражение или поисковый запрос";const run=button("Выполнить");const result=document.createElement("pre");const audit=button("Журнал операций");
+  run.onclick=async()=>{if(!confirm("Разрешить выполнение инструмента «"+select.value+"»?"))return;try{const r=await fetch("/api/tools/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:select.value,input:input.value,confirm:true})});const d=await r.json() as {output?:string;error?:string};result.textContent=d.output||d.error||"Нет ответа";}catch(e){result.textContent=String(e);}};
+  audit.onclick=async()=>{try{const r=await fetch("/api/tools");const d=await r.json() as {audit:{name:string;created_at:string;output:string}[]};result.textContent=d.audit.map(x=>x.created_at+" "+x.name+": "+x.output).join("\\n")||"Журнал пуст";}catch(e){result.textContent=String(e);}};
+  body.append(select,input,run,audit,result);
  }else if(sec.id==="quick"){
   const list=document.createElement("div");const render=()=>{list.replaceChildren(...remoteSettings.quickCommands.map((c,i)=>{const row=document.createElement("div");row.className="ay-settings-command";const name=document.createElement("span");name.textContent="/"+c.name+" — "+c.text.slice(0,70);const del=button("Удалить");del.onclick=()=>{void saveRemote({quickCommands:remoteSettings.quickCommands.filter((_,j)=>j!==i)}).then(render);};row.append(name,del);return row;}));};
   const name=document.createElement("input");name.placeholder="Имя команды";const value=document.createElement("textarea");value.placeholder="Текст команды";value.rows=2;
