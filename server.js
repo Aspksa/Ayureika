@@ -12,7 +12,7 @@ function save(config){fs.mkdirSync(dataDir,{recursive:true});const tmp=configPat
 function toolAllowed(c,name){return c.toolsEnabled&&Array.isArray(c.allowedTools)&&c.allowedTools.includes(name)&&["calculator","clock","memory_search"].includes(name);}
 function publicConfig(c){const {apiKey,...safe}=c;return {...safe,keyConfigured:Boolean(apiKey||process.env.CLOUD_RU_API_KEY)};}
 function json(res,code,body){res.writeHead(code,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"});res.end(JSON.stringify(body));}
-function body(req){return new Promise((resolve,reject)=>{let s="";req.on("data",c=>{s+=c;if(s.length>2e6){reject(new Error("Слишком большой запрос"));req.destroy();}});req.on("end",()=>{try{resolve(JSON.parse(s||"{}"));}catch{reject(new Error("Некорректный JSON"));}});req.on("error",reject);});}
+function body(req){return new Promise((resolve,reject)=>{let s="";req.on("data",c=>{s+=c;if(s.length>30e6){reject(new Error("Слишком большой запрос"));req.destroy();}});req.on("end",()=>{try{resolve(JSON.parse(s||"{}"));}catch{reject(new Error("Некорректный JSON"));}});req.on("error",reject);});}
 function baseUrl(endpoint){const u=new URL(endpoint);if(u.protocol!=="https:")throw new Error("Для API требуется HTTPS");if(u.username||u.password||u.hash)throw new Error("Некорректный URL API");return u.toString().replace(/\/$/,"");}
 function providerError(status){const names={400:"Неверный запрос к модели",401:"Неверный или просроченный API-ключ",402:"Недостаточно средств или доступ к оплате ограничен",403:"Доступ к модели запрещён",404:"Модель или метод API не найден",408:"Истекло время ожидания",422:"Неверные параметры модели",429:"Превышен лимит запросов",500:"Внутренняя ошибка Cloud.ru",502:"Ошибка шлюза Cloud.ru",503:"Сервис Cloud.ru временно недоступен",504:"Cloud.ru не ответил вовремя"};return (names[status]||"Ошибка Cloud.ru")+" (HTTP "+status+")";}
 function modelCapabilities(m){const name=typeof m?.id==="string"?m.id:"";const meta=m&&typeof m==="object"?m:{};const flag=(keys)=>{for(const k of keys)if(typeof meta[k]==="boolean")return meta[k];return null;};return {id:name,streaming:flag(["supports_streaming","streaming"]),tools:flag(["supports_tools","tool_calls","function_calling"]),embeddings:flag(["supports_embeddings","embeddings"]),source:"Метаданные /models; неизвестно означает не проверено"};}
@@ -38,10 +38,12 @@ const pendingTools=new Map();
 function allowedDefinitions(c){return toolDefs.filter(x=>toolAllowed(c,x.function.name));}
 const toolDefs=[{type:"function",function:{name:"calculator",description:"Вычислить арифметическое выражение",parameters:{type:"object",properties:{input:{type:"string"}},required:["input"]}}},{type:"function",function:{name:"clock",description:"Получить текущее время UTC",parameters:{type:"object",properties:{input:{type:"string"}}}}},{type:"function",function:{name:"memory_search",description:"Поиск по сохранённой памяти",parameters:{type:"object",properties:{input:{type:"string"}},required:["input"]}}}];
 async function embed(c,text){if(!c.embeddingModel)throw Error("Не выбрана модель embeddings");const r=await remote(c,"/embeddings",{method:"POST",body:JSON.stringify({model:c.embeddingModel,input:text})});if(!r.ok)throw Error("Embeddings API: "+r.status);const d=await r.json();const v=d.data?.[0]?.embedding;if(!Array.isArray(v))throw Error("Нет вектора в ответе embeddings");return v;}
-async function retrieve(c,query){if(!c.memoryEnabled)return [];if(!c.embeddingModel)return memory.relevant(query,5);
-try{for(const row of memory.missingVectors(c.embeddingModel,10)){try{memory.putVector(row.id,c.embeddingModel,await embed(c,row.content));}catch{break;}}
-const vector=await embed(c,query);return memory.semantic(c.embeddingModel,vector,5).filter(x=>x.score>0.25);
-}catch{return memory.relevant(query,5);}}
+async function retrieve(c,query){if(!c.memoryEnabled)return [];if(!c.embeddingModel)return memory.hybrid(query,null,"",5);
+try{const vector=await embed(c,query);return memory.hybrid(query,vector,c.embeddingModel,5);}
+catch{return memory.hybrid(query,null,"",5);}}
+function cited(rows){return rows.map(x=>({id:x.id,content:x.content,source:memory.sourceInfo(x.id)}));}
+function queueDialogFact(message){if(typeof message!=="string")return;if(message.length>500||message.length<12)return;if(/^(?:я предпочитаю|мне нравится|мой проект|я работаю|для меня важно)(?:\s|$)/iu.test(message.trim())&&!message.includes("?")){try{memory.propose(message.trim(),"Сообщение пользователя, ожидает проверки");}catch{}}}
+
 let indexBusy=false;
 const indexState={lastRun:null,lastError:"",processed:0};
 async function indexTick(){
@@ -50,6 +52,9 @@ async function indexTick(){
  try{for(const row of memory.missingVectors(c.embeddingModel,2)){try{memory.putVector(row.id,c.embeddingModel,await embed(c,row.content));indexState.processed++;indexState.lastError="";}catch(e){indexState.lastError=e instanceof Error?e.message:"Ошибка индексации";break;}}indexState.lastRun=new Date().toISOString();}
  finally{indexBusy=false;}
 }
+let maintenanceDay="";
+function maintenanceTick(){const hour=new Date().getHours(),day=new Date().toLocaleDateString("sv-SE");if(hour===3&&maintenanceDay!==day){maintenanceDay=day;try{memory.maintenance();}catch(e){indexState.lastError="Обслуживание памяти: "+String(e);}}}
+const maintenanceTimer=setInterval(maintenanceTick,60*60*1000);maintenanceTimer.unref();
 const indexTimer=setInterval(()=>{void indexTick().catch(e=>{indexState.lastError=String(e);indexBusy=false;});},30000);indexTimer.unref();
 function cleanupPending(){for(const [id,entry] of pendingTools)if(entry.expires<Date.now())pendingTools.delete(id);}
 function stageTool(c,model,messages,answer,step){
@@ -107,6 +112,8 @@ async function handler(req,res){
    if(pathname==="/api/memory/versions"&&req.method==="POST"){const d=await body(req);return json(res,200,{items:memory.versions(d.id)});}
    if(pathname==="/api/memory/revise"&&req.method==="POST"){const d=await body(req);if(d.confirm!==true)return json(res,403,{error:"Требуется подтверждение"});return json(res,200,memory.revise(d.id,d.content));}
    if(pathname==="/api/memory/stats"&&req.method==="GET"){const c=load();return json(res,200,memory.stats(c.embeddingModel));}
+   if(pathname==="/api/data/full-export"&&req.method==="GET"){const backup=memory.fullBackup();return json(res,200,{...backup,settings:publicConfig(load())});}
+   if(pathname==="/api/data/full-import"&&req.method==="POST"){const d=await body(req);if(d.confirm!==true)return json(res,403,{error:"Требуется подтверждение"});return json(res,200,memory.restoreFull(d));}
    if(pathname==="/api/data/export"&&req.method==="GET"){const c=load();return json(res,200,{kind:"ayureika-server-backup",version:1,settings:publicConfig(c),facts:memory.list().map(x=>x.content),note:"API-ключ не включён. Экспортируются последние 100 записей памяти."});}
    if(pathname==="/api/data/import"&&req.method==="POST"){
     const input=await body(req);if(input.confirm!==true||input.kind!=="ayureika-server-backup"||input.version!==1)return json(res,400,{error:"Неверная резервная копия или нет подтверждения"});
@@ -123,6 +130,14 @@ async function handler(req,res){
     }
     const count=memory.importFacts(input.facts);if(Object.keys(patch).length)save({...load(),...patch});return json(res,200,{imported:count,settingsRestored:Object.keys(patch).length>0});
    }
+   if(pathname==="/api/memory/candidates"&&req.method==="GET")return json(res,200,{items:memory.candidates()});
+   if(pathname==="/api/memory/candidates"&&req.method==="POST"){const d=await body(req);if(d.confirm!==true)return json(res,403,{error:"Требуется подтверждение"});return json(res,200,memory.decideCandidate(d.id,d.approve));}
+   if(pathname==="/api/memory/links"&&req.method==="GET"){const id=new URL(req.url,"http://localhost").searchParams.get("id");return json(res,200,{items:memory.links(id)});}
+   if(pathname==="/api/memory/links"&&req.method==="POST"){const d=await body(req);if(d.confirm!==true)return json(res,403,{error:"Требуется подтверждение"});return json(res,200,memory.link(d.from,d.to,d.relation));}
+   if(pathname==="/api/memory/source"&&req.method==="GET"){const id=new URL(req.url,"http://localhost").searchParams.get("id");return json(res,200,memory.sourceInfo(id));}
+   if(pathname==="/api/memory/source"&&req.method==="POST"){const d=await body(req);if(d.confirm!==true)return json(res,403,{error:"Требуется подтверждение"});return json(res,200,memory.annotate(d.id,d.source,d.confidence));}
+   if(pathname==="/api/memory/journal"&&req.method==="GET")return json(res,200,{items:memory.journal()});
+   if(pathname==="/api/memory/maintenance"&&req.method==="POST"){const d=await body(req);if(d.confirm!==true)return json(res,403,{error:"Требуется подтверждение"});return json(res,200,memory.maintenance());}
    if(pathname==="/api/memory"&&req.method==="GET")return json(res,200,{items:memory.list()});
    if(pathname==="/api/memory"&&req.method==="POST"){const c=load();if(!c.memoryEnabled)return json(res,403,{error:"Память отключена"});const input=await body(req);return json(res,200,memory.remember(input.content));}
    if(pathname==="/api/memory/reindex"&&req.method==="POST"){const c=load();if(!c.memoryEnabled||!c.embeddingModel)return json(res,400,{error:"Включите память и укажите модель embeddings"});const rows=memory.missingVectors(c.embeddingModel,20);let indexed=0;for(const row of rows){memory.putVector(row.id,c.embeddingModel,await embed(c,row.content));indexed++;}return json(res,200,{indexed,remaining:memory.missingVectors(c.embeddingModel,1).length>0});}
@@ -171,7 +186,7 @@ async function handler(req,res){
     if(c.memoryEnabled&&memory.extractExplicit(input.message))return json(res,409,{error:"Команду запоминания отправляйте обычным запросом"});
     const messages=[];if(c.instructions)messages.push({role:"system",content:c.instructions});
     if(c.memoryEnabled&&c.historyLimit>0&&Array.isArray(input.history))for(const m of input.history.slice(-c.historyLimit)){if(["user","assistant"].includes(m.role)&&typeof m.content==="string")messages.push({role:m.role,content:m.content.slice(0,30000)});}
-    if(c.memoryEnabled){const rows=await retrieve(c,input.message.slice(0,500));if(rows.length)messages.unshift({role:"system",content:"Записи памяти пользователя:\n"+rows.map(x=>"- "+x.content).join("\n")});}
+    const rows=c.memoryEnabled?await retrieve(c,input.message.slice(0,500)):[];if(rows.length)messages.unshift({role:"system",content:"Записи памяти (непроверенные могут быть ошибочны):\n"+rows.map(x=>"- "+x.content).join("\n")});
     if(messages.at(-1)?.role!=="user"||messages.at(-1)?.content!==input.message)messages.push({role:"user",content:input.message});
     const model=typeof input.model==="string"&&input.model?input.model:c.model;
     let upstream=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify({model,messages,stream:true})});
@@ -182,19 +197,19 @@ async function handler(req,res){
     const reader=upstream.body.getReader(),decoder=new TextDecoder();let buffer="";
     const send=(obj)=>{if(!res.destroyed)res.write("data: "+JSON.stringify(obj)+"\n\n");};
     res.on("close",()=>{if(!res.writableEnded)void reader.cancel().catch(()=>{});});
-    try{while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const frames=buffer.split(/\r?\n\r?\n/);buffer=frames.pop()||"";
+    try{send({memories:cited(rows)});while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const frames=buffer.split(/\r?\n\r?\n/);buffer=frames.pop()||"";
      for(const frame of frames){for(const line of frame.split(/\r?\n/)){if(!line.startsWith("data:"))continue;const raw=line.slice(5).trim();if(raw==="[DONE]")continue;try{const obj=JSON.parse(raw);const delta=obj.choices?.[0]?.delta?.content;if(typeof delta==="string"&&delta)send({delta});}catch{}}}
-    }send({done:true});}catch(e){send({error:"Поток ответа прерван: "+(e instanceof Error?e.message:"ошибка")});}finally{res.end();}
+    }queueDialogFact(input.message);send({done:true});}catch(e){send({error:"Поток ответа прерван: "+(e instanceof Error?e.message:"ошибка")});}finally{res.end();}
     return;
    }
    if(pathname==="/api/chat"&&req.method==="POST"){
     const c=load();const input=await body(req);if(typeof input.message!=="string"||input.message.length>30000)return json(res,400,{error:"Недопустимое сообщение"});
     const explicitFact=c.memoryEnabled?memory.extractExplicit(input.message):null;
-    if(explicitFact){const saved=memory.remember(explicitFact);return json(res,200,{reply:"Запомнила: "+saved.content,memorySaved:true});}
+    if(explicitFact){const saved=memory.remember(explicitFact);memory.annotate(saved.id,"Команда «Запомни» от пользователя","user_confirmed");return json(res,200,{reply:"Запомнила: "+saved.content,memorySaved:true});}
     if(!c.endpoint||!auth(c)||!c.model)return json(res,503,{error:"Настройте адрес API, ключ и модель в настройках."});
     const messages=[];if(c.instructions)messages.push({role:"system",content:c.instructions});
     if(c.memoryEnabled&&c.historyLimit>0&&Array.isArray(input.history))for(const m of input.history.slice(-c.historyLimit)){if(["user","assistant"].includes(m.role)&&typeof m.content==="string")messages.push({role:m.role,content:m.content.slice(0,30000)});}
-    if(c.memoryEnabled){const remembered=await retrieve(c,input.message.slice(0,500));if(remembered.length)messages.unshift({role:"system",content:"Подтверждённые записи памяти пользователя:\\n"+remembered.map(x=>"- "+x.content).join("\\n")});}
+    const remembered=c.memoryEnabled?await retrieve(c,input.message.slice(0,500)):[];if(remembered.length)messages.unshift({role:"system",content:"Записи памяти (проверяйте достоверность):\n"+remembered.map(x=>"- "+x.content).join("\n")});
     if(messages.at(-1)?.role!=="user"||messages.at(-1)?.content!==input.message)messages.push({role:"user",content:input.message});
     let upstream;let chosen=typeof input.model==="string"&&input.model?input.model:c.model;
     const payload=model=>({model,messages,stream:false,...(c.toolsEnabled&&allowedDefinitions(c).length?{tools:allowedDefinitions(c),tool_choice:"auto"}:{})});
@@ -206,7 +221,7 @@ async function handler(req,res){
     if(staged)return json(res,200,staged);
     const reply=response.choices?.[0]?.message?.content;
     if(typeof reply!=="string")return json(res,502,{error:"Неожиданный ответ модели"});
-    return json(res,200,{reply,model:chosen});
+    queueDialogFact(input.message);return json(res,200,{reply,model:chosen,memories:cited(remembered)});
    }
    return json(res,404,{error:"Неизвестный API"});
   }catch(e){return json(res,400,{error:e instanceof Error?e.message:"Ошибка сервера"});}
