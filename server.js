@@ -205,7 +205,7 @@ async function handler(req,res){
    if(pathname==="/api/chat"&&req.method==="POST"){
     const c=load();const input=await body(req);if(typeof input.message!=="string"||input.message.length>30000)return json(res,400,{error:"Недопустимое сообщение"});
     const explicitFact=c.memoryEnabled?memory.extractExplicit(input.message):null;
-    if(explicitFact){const saved=memory.remember(explicitFact);return json(res,200,{reply:"Запомнила: "+saved.content,memorySaved:true});}
+    if(explicitFact){const saved=memory.remember(explicitFact);memory.annotate(saved.id,"Команда «Запомни» от пользователя","user_confirmed");return json(res,200,{reply:"Запомнила: "+saved.content,memorySaved:true});}
     if(!c.endpoint||!auth(c)||!c.model)return json(res,503,{error:"Настройте адрес API, ключ и модель в настройках."});
     const messages=[];if(c.instructions)messages.push({role:"system",content:c.instructions});
     if(c.memoryEnabled&&c.historyLimit>0&&Array.isArray(input.history))for(const m of input.history.slice(-c.historyLimit)){if(["user","assistant"].includes(m.role)&&typeof m.content==="string")messages.push({role:m.role,content:m.content.slice(0,30000)});}
