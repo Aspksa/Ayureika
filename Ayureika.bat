@@ -1,12 +1,30 @@
 @echo off
-setlocal
+setlocal DisableDelayedExpansion
 cd /d "%~dp0"
-where python >nul 2>nul || (echo Trebuetsya Python & exit /b 1)
-where node >nul 2>nul || (echo Trebuetsya Node.js & exit /b 1)
-where npm >nul 2>nul || (echo Trebuetsya npm & exit /b 1)
-if not exist "node_modules\typescript\bin\tsc" (
-    call npm install || exit /b 1
+where python >nul 2>nul
+if errorlevel 1 (
+    where py >nul 2>nul
+    if not errorlevel 1 (
+        py -3 "%~dp0launcher.py"
+        exit /b %errorlevel%
+    )
+    where winget >nul 2>nul
+    if errorlevel 1 (
+        echo Не найден Python и winget. Установите Python 3.
+        pause
+        exit /b 1
+    )
+    echo Установка Python через winget...
+    winget install --id Python.Python.3.13 --exact --accept-package-agreements --accept-source-agreements
+    if errorlevel 1 exit /b 1
+    where py >nul 2>nul
+    if errorlevel 1 (
+        echo Python установлен. Перезапустите Ayureika.bat.
+        pause
+        exit /b 1
+    )
+    py -3 "%~dp0launcher.py"
+    exit /b %errorlevel%
 )
-call npm run build || exit /b 1
-start "Ayureika API" /D "%~dp0" python backend\main.py
-node server.js
+python "%~dp0launcher.py"
+exit /b %errorlevel%
