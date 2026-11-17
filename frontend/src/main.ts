@@ -110,12 +110,12 @@ form.onsubmit = async e => {
     if(type.includes("text/event-stream") || type.includes("application/x-ndjson") || type.includes("text/plain")) {
       if(!response.body)throw new Error("Сервер не поддерживает поток");
       const reply:Message={role:"assistant",content:""}; target.messages.push(reply);
-      const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="";let streamFailure="";
+      const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="";let streamFailure="";let lastStreamSave=0;
       while(true) { const {done,value}=await reader.read(); if(done)break; buffer+=decoder.decode(value,{stream:true});
         if(type.includes("text/event-stream")) { const parts=buffer.split("\n\n");buffer=parts.pop()||"";for(const part of parts){for(const line of part.split("\n"))if(line.startsWith("data:")){const raw=line.slice(5).trim();if(raw==="[DONE]")continue;try{const obj=JSON.parse(raw) as {delta?:string;content?:string;error?:string;memories?:{id:string;content:string;source?:{source:string;confidence:string}}[]};if(obj.memories)showSources(obj.memories);if(obj.error){streamFailure=obj.error;continue;}reply.content+=obj.delta??obj.content??"";}catch{reply.content+=raw;}}} }
         else if(type.includes("application/x-ndjson")) { const parts=buffer.split("\n");buffer=parts.pop()||"";for(const line of parts){try{const obj=JSON.parse(line) as {delta?:string};reply.content+=obj.delta||"";}catch{}} }
         else { reply.content+=buffer;buffer=""; }
-        if(current===target.id)paint();
+        if(Date.now()-lastStreamSave>1000){persist();lastStreamSave=Date.now();}if(current===target.id)paint();
       }
       if(buffer && type.includes("text/plain"))reply.content+=buffer;
       if(!reply.content)target.messages.pop();if(streamFailure)throw Error(streamFailure);
