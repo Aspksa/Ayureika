@@ -93,6 +93,18 @@ def find_node():
     return node, npm
 
 
+def npm_command(node, npm):
+    """Prefer npm's JS entry point to Windows .cmd quoting."""
+    candidates = [
+        Path(node).resolve().parent / "node_modules" / "npm" / "bin" / "npm-cli.js",
+        Path(npm).resolve().parent / "node_modules" / "npm" / "bin" / "npm-cli.js",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return [node, str(candidate)]
+    return [npm]
+
+
 def require_node():
     node, npm = find_node()
     if not node or not npm:
@@ -109,7 +121,7 @@ def require_node():
     major = int(version.lstrip("v").split(".")[0])
     if major < 18:
         raise RuntimeError("Нужен Node.js 18 или новее, найден " + version)
-    run([npm, "--version"])
+    run(npm_command(node, npm) + ["--version"])
     return node, npm
 
 
@@ -238,11 +250,7 @@ def main():
         tsc = ROOT / "node_modules" / "typescript" / "bin" / "tsc"
         if not tsc.is_file():
             print("Установка TypeScript...")
-            npm_cli = Path(node).with_name("node_modules") / "npm" / "bin" / "npm-cli.js"
-            if npm_cli.is_file():
-                run([node, str(npm_cli), "ci", "--no-audit", "--no-fund"])
-            else:
-                run([npm, "ci", "--no-audit", "--no-fund"])
+            run(npm_command(node, npm) + ["ci", "--no-audit", "--no-fund"])
         run([node, str(tsc), "--project", "tsconfig.json"])
         api, api_port, body = start_with_retry(
             [sys.executable, str(ROOT / "backend" / "main.py")], "/api/status", "api.log")
