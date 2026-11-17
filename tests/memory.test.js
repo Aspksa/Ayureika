@@ -63,3 +63,14 @@ test("similarity review does not delete or merge facts automatically",()=>{
   assert.ok(memory.search(stamp).length>=2);
  }finally{memory.forget(a.id);memory.forget(b.id);}
 });
+
+test("index queue and review counters reflect SQLite records",()=>{
+ const row=memory.remember("Проверка очереди векторов "+Date.now());
+ try{
+  assert.ok(memory.pendingVectors("new-model-check-2026")>=1);
+  assert.ok(memory.stats("new-model-check-2026").pendingVectors>=1);
+  memory.putVector(row.id,"new-model-check-2026",[0.5,0.5]);
+  assert.ok(!memory.missingVectors("new-model-check-2026",100).some(x=>x.id===row.id));
+  assert.ok(Number.isInteger(memory.stats().pendingReviews));
+ }finally{memory.forget(row.id);}
+});
