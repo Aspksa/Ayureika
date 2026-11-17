@@ -1,5 +1,5 @@
 const canvas = document.querySelector<HTMLCanvasElement>("#surface");
-const status = document.querySelector<HTMLElement>("#status");
+const statusElement = document.querySelector<HTMLElement>("#status");
 if (!canvas) throw new Error("Не найден Canvas #surface");
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Браузер не поддерживает Canvas 2D");
@@ -42,4 +42,4 @@ function render(): void {
 }
 window.addEventListener("resize", render);
 render();
-if (status) status.textContent = "Интерфейс работает · сервер запущен";
+if (statusElement) statusElement.textContent = "Интерфейс работает · сервер запущен";
