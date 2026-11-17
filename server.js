@@ -15,6 +15,7 @@ function json(res,code,body){res.writeHead(code,{"Content-Type":"application/jso
 function body(req){return new Promise((resolve,reject)=>{let s="";req.on("data",c=>{s+=c;if(s.length>2e6){reject(new Error("Слишком большой запрос"));req.destroy();}});req.on("end",()=>{try{resolve(JSON.parse(s||"{}"));}catch{reject(new Error("Некорректный JSON"));}});req.on("error",reject);});}
 function baseUrl(endpoint){const u=new URL(endpoint);if(u.protocol!=="https:")throw new Error("Для API требуется HTTPS");if(u.username||u.password||u.hash)throw new Error("Некорректный URL API");return u.toString().replace(/\/$/,"");}
 function providerError(status){const names={400:"Неверный запрос к модели",401:"Неверный или просроченный API-ключ",402:"Недостаточно средств или доступ к оплате ограничен",403:"Доступ к модели запрещён",404:"Модель или метод API не найден",408:"Истекло время ожидания",422:"Неверные параметры модели",429:"Превышен лимит запросов",500:"Внутренняя ошибка Cloud.ru",502:"Ошибка шлюза Cloud.ru",503:"Сервис Cloud.ru временно недоступен",504:"Cloud.ru не ответил вовремя"};return (names[status]||"Ошибка Cloud.ru")+" (HTTP "+status+")";}
+function modelCapabilities(m){const name=typeof m?.id==="string"?m.id:"";const meta=m&&typeof m==="object"?m:{};const flag=(keys)=>{for(const k of keys)if(typeof meta[k]==="boolean")return meta[k];return null;};return {id:name,streaming:flag(["supports_streaming","streaming"]),tools:flag(["supports_tools","tool_calls","function_calling"]),embeddings:flag(["supports_embeddings","embeddings"]),source:"Метаданные /models; неизвестно означает не проверено"};}
 function auth(c){return c.apiKey||process.env.CLOUD_RU_API_KEY||"";}
 async function remote(c,route,options={}){
  const url=baseUrl(c.endpoint)+route,start=Date.now();let last;
@@ -98,8 +99,9 @@ async function handler(req,res){
    }
    if(pathname==="/api/diagnostics"&&req.method==="GET"){
     const c=load(),db=memory.stats(c.embeddingModel);
-    return json(res,200,{server:"ok",sqlite:"ok",memory:db,cloudConfigured:Boolean(c.endpoint&&auth(c)&&c.model),cloud:cloudHealth,indexing:{...indexState,remaining:c.embeddingModel?memory.missingVectors(c.embeddingModel,1).length>0:false},streamEnabled:c.streamEnabled,toolsEnabled:c.toolsEnabled});
+    return json(res,200,{server:"ok",sqlite:"ok",memory:db,cloudConfigured:Boolean(c.endpoint&&auth(c)&&c.model),cloud:cloudHealth,indexing:{...indexState,pending:memory.pendingVectors(c.embeddingModel),enabled:Boolean(c.memoryEnabled&&c.embeddingModel&&auth(c)),busy:indexBusy},streamEnabled:c.streamEnabled,toolsEnabled:c.toolsEnabled});
    }
+   if(pathname==="/api/memory/monitor"&&req.method==="GET"){const c=load();return json(res,200,{...indexState,pending:memory.pendingVectors(c.embeddingModel),enabled:Boolean(c.memoryEnabled&&c.embeddingModel&&auth(c)),busy:indexBusy,reviews:memory.stats(c.embeddingModel).pendingReviews,cloud:{...cloudHealth}});}
    if(pathname==="/api/memory/reviews"&&req.method==="GET")return json(res,200,{items:memory.reviews()});
    if(pathname==="/api/memory/reviews"&&req.method==="POST"){const d=await body(req);if(d.confirm!==true)return json(res,403,{error:"Требуется подтверждение"});return json(res,200,{updated:memory.reviewDecision(d.id,d.status)});}
    if(pathname==="/api/memory/versions"&&req.method==="POST"){const d=await body(req);return json(res,200,{items:memory.versions(d.id)});}
@@ -157,8 +159,8 @@ async function handler(req,res){
    }
    if(pathname==="/api/cloud/models"&&req.method==="GET"){
     const c=load();let models=(process.env.CLOUD_RU_MODELS||"").split(",").map(s=>s.trim()).filter(Boolean);
-    let warning="";if(c.endpoint&&auth(c)){try{const upstream=await remote(c,"/models");if(upstream.ok){const d=await upstream.json();if(Array.isArray(d.data))models=[...new Set([...models,...d.data.map(x=>x.id).filter(x=>typeof x==="string")])];}else warning=providerError(upstream.status);}catch(e){warning="Не удалось получить модели: "+(e instanceof Error?e.message:"ошибка сети");}}
-    return json(res,200,{models:[...new Set([c.model,c.fallbackModel,...models].filter(Boolean))],configured:Boolean(c.endpoint&&auth(c)),warning});
+    let warning="",remoteMetadata=[];if(c.endpoint&&auth(c)){try{const upstream=await remote(c,"/models");if(upstream.ok){const d=await upstream.json();if(Array.isArray(d.data)){remoteMetadata=d.data;models=[...new Set([...models,...d.data.map(x=>x.id).filter(x=>typeof x==="string")])];}}else warning=providerError(upstream.status);}catch(e){warning="Не удалось получить модели: "+(e instanceof Error?e.message:"ошибка сети");}}
+    return json(res,200,{models:[...new Set([c.model,c.fallbackModel,...models].filter(Boolean))],capabilities:remoteMetadata.map(modelCapabilities),configured:Boolean(c.endpoint&&auth(c)),warning});
    }
    if(pathname==="/api/health"&&req.method==="GET"){const c=load();return json(res,200,{server:true,endpointConfigured:Boolean(c.endpoint),keyConfigured:Boolean(auth(c)),modelConfigured:Boolean(c.model)});}
    if(pathname==="/api/chat/stream"&&req.method==="POST"){

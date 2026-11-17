@@ -99,3 +99,36 @@ html[data-ay-theme="light"] .ay-settings-card-title strong,html[data-ay-theme="l
 html[data-ay-theme="light"] .ay-settings-card-title small,html[data-ay-theme="light"] .ay-settings-row small{color:#6e624e}
 html[data-ay-theme="light"] .ay-settings-card-head{color:#30291c}
 @media(max-width:760px){.ay-settings-field{grid-template-columns:1fr}.ay-settings-field>strong,.ay-settings-field>small{grid-column:1}}
+
+/* Compact icon navigation, preserving black and gold design */
+.ay-settings-layout{grid-template-columns:88px minmax(0,1fr);max-width:1400px}
+.ay-settings-nav{align-items:center;padding:12px 8px;gap:10px}
+.ay-settings-nav>input{font-size:11px;padding:9px 5px}
+.ay-settings-nav nav{width:100%;align-items:center}
+.ay-settings-link{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;min-height:54px;padding:8px 4px;font-size:10px}
+.ay-settings-link-glyph{font-size:21px;line-height:1}
+.ay-settings-link-label{font-size:10px;line-height:1.2;overflow-wrap:anywhere}
+.ay-settings-content{min-width:0}
+.ay-settings-card-body pre,.ay-settings-card-body small,.ay-settings-card-body .ay-settings-capabilities{overflow-wrap:anywhere;white-space:pre-wrap}
+.ay-settings-card-body .ay-settings-capabilities{max-height:300px;overflow:auto}
+@media(max-width:760px){
+ .ay-settings-layout{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);gap:8px}
+ .ay-settings-nav{align-items:stretch}
+ .ay-settings-nav nav{flex-direction:row;justify-content:flex-start;align-items:stretch}
+ .ay-settings-link{min-width:65px;width:65px;white-space:normal;flex:none}
+ .ay-settings-link-label{font-size:9px}
+ .ay-settings-header{padding:10px 12px}
+ .ay-settings-header p{font-size:11px}
+ .ay-settings-content{padding-bottom:25px}
+ .ay-settings-card-body{padding:0 12px 12px}
+ .ay-settings-theme-preview{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:420px){
+ .ay-settings-layout{padding:6px}
+ .ay-settings-header h1{font-size:17px}
+ .ay-settings-card-head{gap:8px}
+ .ay-settings-card-title strong{font-size:14px}
+ .ay-settings-card-body .ay-settings-command{flex-wrap:wrap}
+ .ay-settings-card-body button{max-width:100%;overflow-wrap:anywhere}
+ .ay-settings-theme-preview{grid-template-columns:1fr}
+}
