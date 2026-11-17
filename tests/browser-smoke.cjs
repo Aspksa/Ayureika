@@ -41,6 +41,14 @@ async function run(){
  assert.equal(await evaluate("document.querySelector('.ay-settings-card:not([hidden])').id"),"ay-settings-avatar");
  assert.equal(await evaluate("document.querySelectorAll('.ay-avatar-controls input[type=range]').length"),2);
  assert.equal(await evaluate("document.querySelectorAll('.ay-avatar-settings').length"),0);
+ assert.equal(await evaluate("document.querySelectorAll('.ay-settings-link').length"),12);
+ for(const section of ["conn","model","persona","memory","tools","quick","look","avatar","chat","data","diagnostics","about"]){
+  await evaluate("document.querySelector('.ay-settings-link[data-section=\\\""+section+"\\\"]').click()");
+  assert.equal(await evaluate("document.querySelector('.ay-settings-card:not([hidden])').id"),"ay-settings-"+section);
+  assert.equal(await evaluate("document.querySelectorAll('.ay-settings-card:not([hidden])').length"),1);
+ }
+ assert.equal(await evaluate("localStorage.getItem('ayureika:settings:active:v2')"),"about");
+
  assert.ok(await evaluate("Boolean(document.querySelector('.ay-avatar-controls input[type=file]'))"));
  await evaluate("document.querySelector('.ay-settings-link[data-section=\\\"memory\\\"]').click()");
  assert.equal(await evaluate("document.querySelector('.ay-settings-card:not([hidden])').id"),"ay-settings-memory");
