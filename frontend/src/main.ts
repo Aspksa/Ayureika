@@ -170,9 +170,9 @@ settingsPage.className = "ay-settings-page"; settingsPage.hidden = true;
 settingsPage.setAttribute("aria-label", "Настройки Ayureika");
 const settingsHeader = document.createElement("header"); settingsHeader.className = "ay-settings-header";
 const settingsHeading = document.createElement("div");
-const settingsH1 = document.createElement("h1"); settingsH1.textContent = "Настройки";
-const settingsHint = document.createElement("p"); settingsHint.textContent = "Все параметры в одном месте · изменения сохраняются";
-settingsHeading.append(settingsH1,settingsHint);
+const settingsH1 = document.createElement("h1"); settingsH1.textContent = "Центр управления";
+const settingsHint = document.createElement("p"); settingsHint.textContent = "AYUREIKA  /  ПЕРСОНАЛЬНАЯ СИСТЕМА";
+settingsHeading.append(settingsHint,settingsH1);
 const settingsExit = button("×", "Закрыть настройки");settingsExit.className="ay-settings-exit";
 settingsHeader.append(settingsHeading,settingsExit);
 const settingsLayout = document.createElement("div"); settingsLayout.className = "ay-settings-layout";
@@ -181,6 +181,11 @@ const settingsSearch = document.createElement("input"); settingsSearch.type = "s
 const settingsLinks = document.createElement("nav"); settingsLinks.setAttribute("aria-label","Разделы настроек");
 settingsNav.append(settingsSearch,settingsLinks);
 const settingsContent = document.createElement("main"); settingsContent.className = "ay-settings-content";
+const settingsContext=document.createElement("div");settingsContext.className="ay-settings-context";
+const settingsEyebrow=document.createElement("span");settingsEyebrow.className="ay-settings-eyebrow";settingsEyebrow.textContent="НАСТРОЙКИ / 01";
+const settingsContextTitle=document.createElement("strong");settingsContextTitle.textContent="Подключение";
+const settingsContextDescription=document.createElement("p");settingsContextDescription.textContent="Управление параметрами Ayureika";
+settingsContext.append(settingsEyebrow,settingsContextTitle,settingsContextDescription);
 const settingsEmpty=document.createElement("p");settingsEmpty.className="ay-settings-empty";settingsEmpty.textContent="Настройки не найдены. Попробуйте другой запрос.";settingsEmpty.hidden=true;
 settingsLayout.append(settingsNav,settingsContent);settingsPage.append(settingsHeader,settingsLayout);document.body.append(settingsPage);
 type SettingsSection = { id:string; title:string; icon:string; description:string; items:string[] };
@@ -380,12 +385,15 @@ function selectSettingsSection(id:string){
   const nav=settingsLinks.querySelector<HTMLButtonElement>('[data-section="'+section.id+'"]');
   if(nav){nav.classList.toggle("active",section.id===id);nav.setAttribute("aria-current",section.id===id?"page":"false");}
  }
+ const currentSection=settingsSections.find(section=>section.id===id);
+ if(currentSection){settingsEyebrow.textContent="НАСТРОЙКИ / "+String(settingsSections.indexOf(currentSection)+1).padStart(2,"0");settingsContextTitle.textContent=currentSection.title;settingsContextDescription.textContent=currentSection.description;}
  const selected=settingsCards.get(id);
  if(selected){const body=selected.querySelector<HTMLElement>(".ay-settings-card-body");const top=selected.querySelector<HTMLButtonElement>(".ay-settings-card-head");if(body?.hidden)top?.click();}
  settingsContent.scrollTop=0;
 }
 function rebuildSettings(){
  settingsContent.replaceChildren();settingsLinks.replaceChildren();settingsCards.clear();
+ settingsContent.append(settingsContext);
  for(const section of settingsSections)addSettingsCard(section);
  if(typeof avatarControlsReady!=="undefined"&&avatarControlsReady){settingsCards.get("avatar")?.querySelector(".ay-settings-card-body")?.append(avatarControlsReady);}
  selectSettingsSection(activeSettingsSection);
@@ -403,7 +411,7 @@ settingsSearch.oninput=()=>{
   if(nav)nav.hidden=!matches.some(x=>x.id===sec.id);
  }
  if(matches.length)selectSettingsSection(matches.some(x=>x.id===activeSettingsSection)?activeSettingsSection:matches[0]!.id);
- if(!matches.length){for(const card of settingsCards.values())card.hidden=true;settingsEmpty.hidden=false;}else settingsEmpty.hidden=true;
+ if(!matches.length){for(const card of settingsCards.values())card.hidden=true;settingsEmpty.hidden=false;settingsContext.hidden=true;}else{settingsEmpty.hidden=true;settingsContext.hidden=false;}
 };
 async function showSettings(){try{const r=await fetch('/api/settings');if(r.ok){remoteSettings=await r.json() as RemoteSettings;selectedModel=remoteSettings.model;models=[...new Set([selectedModel,...models].filter(Boolean))];renderModels();rebuildSettings();settingsSearch.dispatchEvent(new Event("input"));}}catch{}settingsPage.hidden=false;panel.hidden=true;settingsSearch.focus();}
 function hideSettings(){settingsPage.hidden=true;settingsSearch.value="";settingsSearch.dispatchEvent(new Event("input"));}
