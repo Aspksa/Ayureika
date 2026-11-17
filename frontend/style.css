@@ -1,572 +1,146 @@
-/* ============================================================
-   Ayureika — тёмная тема с янтарными акцентами, glassmorphism
-   и плавными анимациями.
-   ============================================================ */
+html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden;font-family:Arial,sans-serif;color:#eee}*{box-sizing:border-box}button,textarea{font:inherit}button{cursor:pointer}.ay-avatar{position:fixed;width:var(--avatar-size,64px);height:var(--avatar-size,64px);border:2px solid #b9974c;border-radius:50%;background:#18140d;color:#e5c77a;touch-action:none;z-index:20;overflow:hidden;padding:0}.ay-avatar img,.ay-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}.ay-fallback{display:grid;place-items:center;font-size:26px}.ay-chat{position:fixed;right:18px;bottom:18px;width:min(760px,calc(100vw - 36px));height:min(650px,calc(100dvh - 36px));z-index:30;display:flex;flex-direction:column;background:#0d0d0d;border:1px solid #403522;border-radius:16px;box-shadow:0 15px 60px #000a;overflow:hidden}.ay-chat[hidden]{display:none}.ay-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #29251f}.ay-head strong{flex:1;color:#e2c47b}.ay-head button,.ay-form button{background:#29251b;color:#e7d5aa;border:1px solid #58482a;border-radius:8px;padding:8px 12px}.ay-thread{flex:1;overflow:auto;display:flex;flex-direction:column;gap:14px;padding:20px}.ay-msg{white-space:pre-wrap;overflow-wrap:anywhere;max-width:88%;line-height:1.5}.ay-msg.user{align-self:flex-end;background:#27221b;border-radius:16px;padding:12px 16px}.ay-msg.assistant{align-self:flex-start;padding:12px 4px}.ay-form{display:flex;align-items:end;gap:8px;padding:12px 16px}.ay-form textarea{flex:1;min-width:0;resize:vertical;max-height:170px;background:#1b1b1b;border:1px solid #413b30;color:#fff;border-radius:12px;padding:12px}.ay-status{margin:0;padding:0 16px 12px;color:#c4a66c;font-size:13px;min-height:14px}@media(max-width:600px){.ay-chat{inset:0;width:100%;height:100dvh;border-radius:0}.ay-head{padding:12px}.ay-form{padding:10px}}
+.ay-avatar-settings{position:fixed;z-index:40;right:16px;top:16px;width:min(320px,calc(100vw - 32px));background:#14120e;border:1px solid #8b733e;border-radius:14px;padding:16px;box-shadow:0 12px 36px #000b;color:#eee}.ay-avatar-settings[hidden]{display:none}.ay-avatar-settings header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;color:#e2c47b}.ay-avatar-settings header button{background:transparent;border:0;color:inherit;font-size:24px}.ay-avatar-settings label{display:grid;grid-template-columns:1fr auto;gap:8px;margin:12px 0}.ay-avatar-settings input{grid-column:1/-1;width:100%;accent-color:#c9a85d}.ay-avatar:focus-visible{outline:3px solid #e2c47b;outline-offset:4px}@media(max-width:600px){.ay-avatar-settings{top:env(safe-area-inset-top,12px);right:12px}.ay-chat{padding-bottom:env(safe-area-inset-bottom,0px)}}
 
-:root {
-  --bg: #07070b;
-  --surface: rgba(21, 20, 30, .82);
-  --surface-solid: #15141e;
-  --surface-raised: #1d1b28;
-  --border: rgba(255, 255, 255, .09);
-  --border-strong: rgba(255, 255, 255, .16);
-  --accent: #f2b705;
-  --accent-soft: #ffd369;
-  --accent-dim: rgba(242, 183, 5, .14);
-  --text: #eceaf4;
-  --text-muted: #9b97ad;
-  --danger: #ff8471;
-  --radius-lg: 20px;
-  --radius-md: 14px;
-  --radius-sm: 10px;
-  --shadow: 0 24px 70px rgba(0, 0, 0, .55), 0 2px 10px rgba(0, 0, 0, .4);
-  --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+.ay-avatar-settings .ay-avatar-upload{display:block;margin:18px 0 8px;padding:12px;border:1px solid #a68b51;border-radius:9px;background:#302718;color:#f2d78e;text-align:center;cursor:pointer}.ay-avatar-settings .ay-avatar-upload input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}.ay-avatar-settings .ay-avatar-upload:focus-within{outline:2px solid #f2d78e;outline-offset:3px}.ay-avatar-upload-status{font-size:12px;color:#d3ba82;line-height:1.4;min-height:1em}
+
+/* JUUNIBI-inspired chat workspace */
+.ay-chat{width:min(920px,calc(100vw - 36px));height:min(680px,calc(100dvh - 36px));flex-direction:row;min-width:0;min-height:0}
+.ay-chat.maximized{inset:0!important;width:100%!important;height:100dvh!important;border-radius:0}
+.ay-side{width:240px;flex:none;display:flex;flex-direction:column;gap:10px;padding:12px;background:#14120f;border-right:1px solid #403522;min-height:0}
+.ay-side>button,.ay-side>input{padding:9px 10px;border:1px solid #4b3e28;border-radius:9px;background:#211c15;color:#f0d89f;width:100%}
+.ay-chat-list{overflow-y:auto;min-height:0;display:flex;flex-direction:column;gap:4px}
+.ay-chat-row{display:flex;align-items:center;border-radius:8px}
+.ay-chat-row.active{background:#34291b}
+.ay-chat-row button{background:transparent;color:#e6d6b2;border:0;padding:8px 5px}
+.ay-chat-row .ay-chat-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;padding-left:10px}
+.ay-chat-main{display:flex;flex:1;min-width:0;min-height:0;flex-direction:column}
+.ay-head{cursor:move;flex-wrap:wrap;gap:8px}
+.ay-head select,.ay-head input{min-width:0;width:110px;max-width:135px;padding:6px;background:#211c15;border:1px solid #4b3e28;color:#e7d5aa;border-radius:7px;font-size:12px}
+.ay-head .ay-context{font-size:11px;color:#c6aa75;white-space:nowrap}
+.ay-head strong{flex:1;min-width:70px}
+.ay-resize{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,#a68b51 50%,#a68b51 60%,transparent 60%,transparent 70%,#a68b51 70%)}
+.ay-chat.maximized .ay-resize{display:none}
+.ay-avatar.dragging{transform:scale(1.12);box-shadow:0 0 28px #d8b25e88;cursor:grabbing}
+.ay-avatar.busy{box-shadow:0 0 0 3px #cfa95c66,0 0 24px #cfa95c}
+.ay-busy{position:absolute;inset:0;border-radius:50%;border:3px solid transparent;border-top-color:#ffe2a0;animation:ay-spin 1s linear infinite;pointer-events:none}
+.ay-busy[hidden]{display:none}
+@keyframes ay-spin{to{transform:rotate(360deg)}}
+.ay-msg pre{background:#171b22;border:1px solid #3b4655;padding:12px;border-radius:8px;overflow:auto;max-width:100%}
+.ay-msg code{font-family:Consolas,monospace;color:#e8bb75}
+.ay-msg pre code{color:#c4d9ef;white-space:pre}
+.ay-msg strong{color:#ffe2a0}
+.ay-msg{white-space:pre-wrap}
+@media(max-width:639px){.ay-chat{inset:0!important;width:100%!important;height:100dvh!important;border-radius:0}.ay-side{width:112px;padding:6px}.ay-side>button,.ay-side>input{font-size:11px}.ay-chat-row button{font-size:11px}.ay-chat-row button:not(.ay-chat-name){padding:4px 2px}.ay-head{cursor:default;padding:8px}.ay-head select,.ay-head input{max-width:95px}.ay-resize{display:none}.ay-thread{padding:12px}}
+
+[hidden]{display:none!important}
+
+
+/* JUUNIBI settings page layout, adapted to Ayureika's black and gold identity */
+.ay-settings-page{position:fixed;inset:0;z-index:60;background:#090909;color:#e8dfce;display:flex;flex-direction:column;min-width:0}
+.ay-settings-header{padding:20px 30px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #3a3020;background:linear-gradient(120deg,#16130e,#090909)}
+.ay-settings-header h1{margin:0;font-size:25px;color:#f1d392;letter-spacing:.02em}
+.ay-settings-header p{margin:5px 0 0;color:#9e947f;font-size:13px}
+.ay-settings-header button{background:#292117;color:#e9d3a3;border:1px solid #6b5430;border-radius:10px;padding:8px 14px;font-size:21px}
+.ay-settings-layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:24px;max-width:1300px;width:100%;margin:0 auto;padding:24px;flex:1;min-height:0}
+.ay-settings-nav{display:flex;flex-direction:column;gap:14px;min-height:0;background:#11100e;border:1px solid #30291e;border-radius:16px;padding:14px}
+.ay-settings-nav input{background:#1b1915;border:1px solid #493b25;color:#f3dfb6;border-radius:10px;padding:12px;min-width:0;width:100%}
+.ay-settings-nav nav{display:flex;flex-direction:column;gap:4px;overflow:auto;min-height:0}
+.ay-settings-link{width:100%;text-align:left;border:0;background:transparent;color:#bbb1a0;padding:12px 10px;border-radius:10px;font-size:14px;transition:background .15s}
+.ay-settings-link:hover,.ay-settings-link.active{background:#30271a;color:#f4d48b}
+.ay-settings-content{min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:16px;padding:0 8px 35px 0;scroll-behavior:smooth}
+.ay-settings-card{background:#14120f;border:1px solid #393020;border-radius:16px;overflow:hidden;flex:none}
+.ay-settings-card-head{display:flex;align-items:center;width:100%;padding:17px 20px;text-align:left;gap:16px;background:transparent;color:#eee;border:0}
+.ay-settings-card-head:hover{background:#1b1812}
+.ay-settings-glyph{width:43px;height:43px;flex:none;display:grid;place-items:center;border-radius:12px;background:#302518;color:#f3ce7a;font-size:21px}
+.ay-settings-card-title{display:flex;flex-direction:column;flex:1;gap:5px}
+.ay-settings-card-title strong{font-size:16px;color:#f4dfae}
+.ay-settings-card-title small{font-size:12px;color:#a99d88}
+.ay-settings-card-head>span:last-child{color:#bca36e;font-size:23px}
+.ay-settings-card.collapsed .ay-settings-card-head>span:last-child{transform:rotate(-90deg)}
+.ay-settings-card-body{padding:0 20px 20px 79px;display:flex;flex-direction:column;gap:13px}
+.ay-settings-row{display:flex;flex-direction:column;gap:4px;padding:10px 0;border-bottom:1px solid #2d271e}
+.ay-settings-row strong{font-size:14px;color:#e7dac0;font-weight:500}
+.ay-settings-row small{font-size:12px;color:#a79a84;line-height:1.5}
+.ay-settings-theme-preview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.ay-settings-theme-tile{border:1px solid #4b4031;border-radius:11px;display:flex;flex-direction:column;gap:9px;padding:12px;font-size:12px;color:#a99e8b}
+.ay-settings-theme-tile.active{border-color:#c6a45e;color:#f5db9c}
+.ay-settings-theme-mini{height:45px;border-radius:5px;background:linear-gradient(90deg,#3c3428 25%,#1c1b18 25%);border:1px solid #5c4b30}
+.ay-settings-theme-tile:nth-child(2) .ay-settings-theme-mini{background:linear-gradient(90deg,#ddd3c4 25%,#f4f0e8 25%)}
+.ay-settings-swatches{display:flex;gap:10px}
+.ay-settings-swatches span{height:24px;width:24px;border-radius:50%;border:2px solid #ffffff22}
+@media(max-width:760px){.ay-settings-header{padding:14px 16px}.ay-settings-header h1{font-size:20px}.ay-settings-layout{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);gap:10px;padding:10px}.ay-settings-nav{padding:10px;gap:8px}.ay-settings-nav nav{flex-direction:row;overflow-x:auto;flex:none}.ay-settings-link{white-space:nowrap;width:auto;font-size:12px;padding:9px}.ay-settings-content{padding:0 0 30px}.ay-settings-card-head{padding:12px}.ay-settings-card-body{padding:0 14px 14px}.ay-settings-glyph{width:35px;height:35px}.ay-settings-theme-tile{padding:6px;font-size:10px}}
+@media(prefers-reduced-motion:reduce){.ay-settings-content{scroll-behavior:auto}}
+
+
+/* Active settings controls */
+.ay-settings-field{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;align-items:center;padding:10px 0;border-bottom:1px solid #30281c}
+.ay-settings-field>strong,.ay-settings-field>small{grid-column:1/-1}
+.ay-settings-field input,.ay-settings-field select,.ay-settings-card-body textarea,.ay-settings-card-body>input{background:#211c15;color:#f5e6c7;border:1px solid #5a492b;border-radius:9px;padding:10px;min-width:0;width:100%;font:inherit}
+.ay-settings-card-body textarea{resize:vertical;min-height:70px}
+.ay-settings-card-body button{background:#342a1b;color:#f2d7a1;border:1px solid #715a33;border-radius:9px;padding:9px 13px}
+.ay-settings-card-body button:hover{background:#4a3820}
+.ay-settings-card-body small{color:#d0b781}
+.ay-settings-toggle{display:flex;align-items:center;gap:12px;padding:12px 0}
+.ay-settings-toggle input{accent-color:var(--ay-accent,#caa65b);width:18px;height:18px}
+.ay-settings-toggle small{margin-left:auto}
+.ay-settings-model-list{display:flex;flex-wrap:wrap;gap:6px}
+.ay-settings-command{display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid #322b20;padding:6px}
+.ay-settings-color{width:28px;height:28px;border-radius:50%!important;padding:0!important}
+.ay-settings-card{border-radius:var(--ay-radius,16px)}
+.ay-settings-link.active,.ay-settings-link:hover{color:var(--ay-accent,#caa65b)}
+.ay-settings-header h1,.ay-settings-card-title strong{color:var(--ay-accent,#caa65b)}
+.ay-chat{border-radius:var(--ay-radius,16px);font-size:var(--ay-font,14px)}
+.ay-thread{gap:var(--ay-density,14px)}
+.ay-msg.user{border-radius:var(--ay-radius,16px)}
+html[data-ay-theme="light"] .ay-settings-page{background:#f5f0e6;color:#30291c}
+html[data-ay-theme="light"] .ay-settings-nav,html[data-ay-theme="light"] .ay-settings-card{background:#fefbf5;color:#30291c}
+html[data-ay-theme="light"] .ay-settings-header{background:#ede3d0}
+html[data-ay-theme="light"] .ay-settings-card-title strong,html[data-ay-theme="light"] .ay-settings-row strong{color:#4d3a18}
+html[data-ay-theme="light"] .ay-settings-card-title small,html[data-ay-theme="light"] .ay-settings-row small{color:#6e624e}
+html[data-ay-theme="light"] .ay-settings-card-head{color:#30291c}
+@media(max-width:760px){.ay-settings-field{grid-template-columns:1fr}.ay-settings-field>strong,.ay-settings-field>small{grid-column:1}}
+
+/* Compact icon navigation, preserving black and gold design */
+.ay-settings-layout{grid-template-columns:88px minmax(0,1fr);max-width:1400px}
+.ay-settings-nav{align-items:center;padding:12px 8px;gap:10px}
+.ay-settings-nav>input{font-size:11px;padding:9px 5px}
+.ay-settings-nav nav{width:100%;align-items:center}
+.ay-settings-link{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;min-height:54px;padding:8px 4px;font-size:10px}
+.ay-settings-link-glyph{font-size:21px;line-height:1}
+.ay-settings-link-label{font-size:10px;line-height:1.2;overflow-wrap:anywhere}
+.ay-settings-content{min-width:0}
+.ay-settings-card-body pre,.ay-settings-card-body small,.ay-settings-card-body .ay-settings-capabilities{overflow-wrap:anywhere;white-space:pre-wrap}
+.ay-settings-card-body .ay-settings-capabilities{max-height:300px;overflow:auto}
+@media(max-width:760px){
+ .ay-settings-layout{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);gap:8px}
+ .ay-settings-nav{align-items:stretch}
+ .ay-settings-nav nav{flex-direction:row;justify-content:flex-start;align-items:stretch}
+ .ay-settings-link{min-width:65px;width:65px;white-space:normal;flex:none}
+ .ay-settings-link-label{font-size:9px}
+ .ay-settings-header{padding:10px 12px}
+ .ay-settings-header p{font-size:11px}
+ .ay-settings-content{padding-bottom:25px}
+ .ay-settings-card-body{padding:0 12px 12px}
+ .ay-settings-theme-preview{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:420px){
+ .ay-settings-layout{padding:6px}
+ .ay-settings-header h1{font-size:17px}
+ .ay-settings-card-head{gap:8px}
+ .ay-settings-card-title strong{font-size:14px}
+ .ay-settings-card-body .ay-settings-command{flex-wrap:wrap}
+ .ay-settings-card-body button{max-width:100%;overflow-wrap:anywhere}
+ .ay-settings-theme-preview{grid-template-columns:1fr}
 }
 
-* { box-sizing: border-box; }
-
-html, body {
-  margin: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  font-family: var(--font);
-  color: var(--text);
-  background:
-    radial-gradient(1100px 620px at 88% -12%, rgba(242, 183, 5, .09), transparent 62%),
-    radial-gradient(900px 640px at -12% 112%, rgba(96, 74, 255, .11), transparent 60%),
-    var(--bg);
-}
-
-button, textarea, input { font: inherit; }
-button { cursor: pointer; border: 0; background: none; color: inherit; }
-::selection { background: var(--accent); color: #100c00; }
-
-:focus-visible {
-  outline: 2px solid var(--accent-soft);
-  outline-offset: 3px;
-  border-radius: 6px;
-}
-
-/* ---------- Аватар ---------- */
-
-.ay-avatar {
-  position: fixed;
-  width: var(--avatar-size, 64px);
-  height: var(--avatar-size, 64px);
-  padding: 0;
-  touch-action: none;
-  z-index: 20;
-  overflow: hidden;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  background:
-    linear-gradient(var(--surface-solid), var(--surface-solid)) padding-box,
-    linear-gradient(140deg, var(--accent), #a45cff 55%, var(--accent-soft)) border-box;
-  box-shadow:
-    0 10px 30px rgba(0, 0, 0, .5),
-    0 0 0 1px rgba(0, 0, 0, .4),
-    0 0 22px rgba(242, 183, 5, .25);
-  transition: transform .25s cubic-bezier(.2, .9, .3, 1.4), box-shadow .25s ease;
-  animation: ay-avatar-in .5s cubic-bezier(.2, .9, .3, 1.3) both;
-}
-
-@keyframes ay-avatar-in {
-  from { opacity: 0; transform: scale(.4); }
-  to   { opacity: 1; transform: scale(1); }
-}
-
-.ay-avatar:hover {
-  transform: scale(1.07);
-  box-shadow:
-    0 14px 38px rgba(0, 0, 0, .55),
-    0 0 30px rgba(242, 183, 5, .45);
-}
-
-.ay-avatar:active { transform: scale(.96); }
-
-.ay-avatar img,
-.ay-fallback {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
-}
-
-.ay-fallback {
-  display: grid;
-  place-items: center;
-  font-size: calc(var(--avatar-size, 64px) * .42);
-  font-weight: 700;
-  letter-spacing: .02em;
-  background: radial-gradient(circle at 30% 25%, #2c2740, #17141f 70%);
-  color: var(--accent-soft);
-  text-shadow: 0 0 14px rgba(242, 183, 5, .45);
-}
-
-/* ---------- Панель чата ---------- */
-
-.ay-chat {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  width: min(760px, calc(100vw - 36px));
-  height: min(650px, calc(100dvh - 36px));
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  backdrop-filter: blur(22px) saturate(150%);
-  -webkit-backdrop-filter: blur(22px) saturate(150%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-}
-
-.ay-chat[hidden] { display: none; }
-
-.ay-chat:not([hidden]) {
-  animation: ay-panel-in .3s cubic-bezier(.2, .9, .3, 1.15) both;
-}
-
-@keyframes ay-panel-in {
-  from { opacity: 0; transform: translateY(18px) scale(.98); }
-  to   { opacity: 1; transform: none; }
-}
-
-.ay-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255, 255, 255, .04), transparent);
-}
-
-.ay-brand {
-  flex: 1;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-}
-
-.ay-head strong {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: .04em;
-  background: linear-gradient(92deg, var(--accent-soft), var(--accent) 45%, #c78bff);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.ay-tagline {
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ay-head button {
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: rgba(255, 255, 255, .05);
-  color: var(--text);
-  font-size: 13px;
-  transition: background .2s ease, border-color .2s ease, transform .15s ease;
-}
-
-.ay-head button:hover {
-  background: var(--accent-dim);
-  border-color: rgba(242, 183, 5, .5);
-}
-
-.ay-head button:active { transform: scale(.95); }
-
-.ay-close {
-  width: 34px;
-  height: 34px;
-  padding: 0 !important;
-  display: grid;
-  place-items: center;
-  font-size: 19px;
-  line-height: 1;
-  border-radius: 50% !important;
-}
-
-/* ---------- Лента сообщений ---------- */
-
-.ay-thread {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 22px 20px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, .18) transparent;
-}
-
-.ay-thread::-webkit-scrollbar { width: 8px; }
-.ay-thread::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .15); border-radius: 8px; }
-.ay-thread::-webkit-scrollbar-thumb:hover { background: rgba(242, 183, 5, .45); }
-
-.ay-empty {
-  margin: auto;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1.6;
-  display: grid;
-  gap: 10px;
-  justify-items: center;
-  animation: ay-fade-in .5s ease both;
-}
-
-.ay-empty::before {
-  content: "✦";
-  font-size: 34px;
-  color: var(--accent);
-  text-shadow: 0 0 18px rgba(242, 183, 5, .55);
-}
-
-@keyframes ay-fade-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: none; }
-}
-
-.ay-msg {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  max-width: 84%;
-  line-height: 1.55;
-  font-size: 15px;
-  padding: 12px 16px;
-  border-radius: var(--radius-md);
-  animation: ay-msg-in .28s cubic-bezier(.2, .9, .3, 1.1) both;
-}
-
-@keyframes ay-msg-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: none; }
-}
-
-.ay-msg.user {
-  align-self: flex-end;
-  border-bottom-right-radius: 4px;
-  background: linear-gradient(135deg, rgba(242, 183, 5, .22), rgba(242, 183, 5, .1));
-  border: 1px solid rgba(242, 183, 5, .35);
-  color: #ffe9a8;
-}
-
-.ay-msg.assistant {
-  align-self: flex-start;
-  border-bottom-left-radius: 4px;
-  background: rgba(255, 255, 255, .06);
-  border: 1px solid var(--border);
-  color: var(--text);
-}
-
-/* Индикатор «печатает…» */
-
-.ay-typing {
-  align-self: flex-start;
-  display: inline-flex;
-  gap: 5px;
-  padding: 14px 18px;
-  border-radius: var(--radius-md);
-  border-bottom-left-radius: 4px;
-  background: rgba(255, 255, 255, .06);
-  border: 1px solid var(--border);
-}
-
-.ay-typing i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  animation: ay-bounce 1.2s ease-in-out infinite;
-}
-
-.ay-typing i:nth-child(2) { animation-delay: .15s; }
-.ay-typing i:nth-child(3) { animation-delay: .3s; }
-
-@keyframes ay-bounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: .5; }
-  30% { transform: translateY(-6px); opacity: 1; }
-}
-
-/* ---------- Форма ввода ---------- */
-
-.ay-form {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  padding: 14px 16px 10px;
-  border-top: 1px solid var(--border);
-  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, .25));
-}
-
-.ay-form textarea {
-  flex: 1;
-  min-width: 0;
-  resize: vertical;
-  max-height: 170px;
-  background: rgba(0, 0, 0, .35);
-  border: 1px solid var(--border-strong);
-  color: var(--text);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-  line-height: 1.45;
-  transition: border-color .2s ease, box-shadow .2s ease;
-}
-
-.ay-form textarea::placeholder { color: var(--text-muted); }
-
-.ay-form textarea:focus {
-  outline: none;
-  border-color: rgba(242, 183, 5, .6);
-  box-shadow: 0 0 0 3px rgba(242, 183, 5, .15);
-}
-
-.ay-send {
-  padding: 11px 20px;
-  border-radius: 999px;
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: .02em;
-  color: #14100a;
-  background: linear-gradient(135deg, var(--accent-soft), var(--accent) 60%, #e08b00);
-  box-shadow: 0 6px 18px rgba(242, 183, 5, .3);
-  transition: transform .15s ease, box-shadow .2s ease, filter .2s ease;
-}
-
-.ay-send:hover:not(:disabled) {
-  transform: translateY(-1px);
-  filter: brightness(1.08);
-  box-shadow: 0 10px 24px rgba(242, 183, 5, .4);
-}
-
-.ay-send:active:not(:disabled) { transform: translateY(0) scale(.97); }
-
-.ay-send:disabled {
-  filter: grayscale(.7) brightness(.7);
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.ay-stop {
-  padding: 11px 16px;
-  border-radius: 999px;
-  font-size: 14px;
-  color: var(--danger);
-  border: 1px solid rgba(255, 132, 113, .45);
-  background: rgba(255, 132, 113, .1);
-  transition: background .2s ease, transform .15s ease;
-}
-
-.ay-stop:hover { background: rgba(255, 132, 113, .2); }
-.ay-stop:active { transform: scale(.95); }
-
-.ay-status {
-  margin: 0;
-  padding: 0 18px 12px;
-  color: var(--accent-soft);
-  font-size: 13px;
-  min-height: 14px;
-}
-
-/* ---------- Настройки аватара ---------- */
-
-.ay-avatar-settings {
-  position: fixed;
-  z-index: 40;
-  right: 16px;
-  top: 16px;
-  width: min(330px, calc(100vw - 32px));
-  background: var(--surface);
-  backdrop-filter: blur(22px) saturate(150%);
-  -webkit-backdrop-filter: blur(22px) saturate(150%);
-  border: 1px solid rgba(242, 183, 5, .3);
-  border-radius: var(--radius-lg);
-  padding: 18px 20px;
-  box-shadow: var(--shadow);
-  color: var(--text);
-}
-
-.ay-avatar-settings[hidden] { display: none; }
-
-.ay-avatar-settings:not([hidden]) {
-  animation: ay-panel-in .3s cubic-bezier(.2, .9, .3, 1.15) both;
-}
-
-.ay-avatar-settings header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.ay-avatar-settings header strong {
-  font-size: 15px;
-  letter-spacing: .03em;
-  color: var(--accent-soft);
-}
-
-.ay-avatar-settings header button {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  font-size: 20px;
-  border-radius: 50%;
-  color: var(--text-muted);
-  transition: background .2s ease, color .2s ease;
-}
-
-.ay-avatar-settings header button:hover {
-  background: rgba(255, 255, 255, .08);
-  color: var(--text);
-}
-
-.ay-avatar-settings label {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 6px 10px;
-  margin: 14px 0;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.ay-avatar-settings output {
-  font-variant-numeric: tabular-nums;
-  color: var(--accent-soft);
-  font-weight: 600;
-}
-
-.ay-avatar-settings input[type="range"] {
-  grid-column: 1 / -1;
-  width: 100%;
-  appearance: none;
-  -webkit-appearance: none;
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent), rgba(255, 255, 255, .12));
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-.ay-avatar-settings input[type="range"]::-webkit-slider-thumb {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  border: 3px solid #201a08;
-  box-shadow: 0 0 12px rgba(242, 183, 5, .6);
-  transition: transform .15s ease;
-}
-
-.ay-avatar-settings input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
-
-.ay-avatar-settings input[type="range"]::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  border: 3px solid #201a08;
-  box-shadow: 0 0 12px rgba(242, 183, 5, .6);
-}
-
-.ay-avatar-settings .ay-avatar-upload {
-  display: block;
-  margin: 18px 0 8px;
-  padding: 13px;
-  border: 1px dashed rgba(242, 183, 5, .5);
-  border-radius: var(--radius-md);
-  background: var(--accent-dim);
-  color: var(--accent-soft);
-  font-size: 14px;
-  font-weight: 600;
-  text-align: center;
-  cursor: pointer;
-  transition: background .2s ease, border-color .2s ease, transform .15s ease;
-}
-
-.ay-avatar-settings .ay-avatar-upload:hover {
-  background: rgba(242, 183, 5, .22);
-  border-color: var(--accent);
-}
-
-.ay-avatar-settings .ay-avatar-upload:active { transform: scale(.98); }
-
-.ay-avatar-settings .ay-avatar-upload input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  overflow: hidden;
-}
-
-.ay-avatar-settings .ay-avatar-upload:focus-within {
-  outline: 2px solid var(--accent-soft);
-  outline-offset: 3px;
-}
-
-.ay-avatar-upload-status {
-  font-size: 12px;
-  color: var(--text-muted);
-  line-height: 1.4;
-  min-height: 1em;
-  margin: 6px 0 0;
-}
-
-.ay-avatar:focus-visible {
-  outline: 3px solid var(--accent-soft);
-  outline-offset: 4px;
-}
-
-/* ---------- Адаптивность ---------- */
-
-@media (max-width: 600px) {
-  .ay-chat {
-    inset: 0;
-    width: 100%;
-    height: 100dvh;
-    border-radius: 0;
-    border-left: 0;
-    border-right: 0;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  .ay-head { padding: 12px 14px; }
-  .ay-tagline { display: none; }
-  .ay-thread { padding: 16px 14px; }
-  .ay-msg { max-width: 92%; }
-  .ay-form { padding: 10px 12px 8px; }
-  .ay-avatar-settings {
-    top: calc(env(safe-area-inset-top, 12px) + 12px);
-    right: 12px;
-    left: 12px;
-    width: auto;
-  }
-}
-
-/* ---------- Уважение к prefers-reduced-motion ---------- */
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
-  }
-}
+/* Memory provenance remains readable on desktop and mobile. */
+.ay-memory-sources{border-top:1px solid #493b25;background:#15120d;color:#dcc38c;padding:7px 12px;max-height:160px;overflow:auto;font-size:12px}
+.ay-memory-sources summary{cursor:pointer;color:#f2d493}
+.ay-memory-sources p{margin:6px 0;overflow-wrap:anywhere}
+@media(max-width:639px){.ay-memory-sources{max-height:120px;font-size:11px}}
+
+/* One active settings page; hidden cards never take layout space. */
+.ay-settings-card[hidden],.ay-settings-link[hidden],.ay-settings-card-body[hidden]{display:none!important}
+.ay-settings-content{overflow-y:auto;min-height:0}
+.ay-settings-link[aria-current="page"]{background:#302617;border-color:#bd9952;color:#f6d795}
+@media(max-width:760px){.ay-settings-content{min-height:0;overflow-y:auto}}
