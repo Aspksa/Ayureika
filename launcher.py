@@ -23,7 +23,16 @@ PROCESSES = []
 
 def run(command, **kwargs):
     LOG.info("Команда: %s", command)
-    return subprocess.run(command, cwd=ROOT, creationflags=HIDDEN, check=True, **kwargs)
+    result = subprocess.run(command, cwd=ROOT, creationflags=HIDDEN,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, encoding="utf-8", errors="replace", **kwargs)
+    if result.stdout:
+        LOG.info("Вывод команды:\\n%s", result.stdout)
+        print(result.stdout, flush=True)
+    if result.returncode:
+        raise RuntimeError("Команда завершилась с кодом %s: %s. Подробности выше и в logs\\\\startup.log"
+                           % (result.returncode, command))
+    return result
 
 
 def executable(name):
