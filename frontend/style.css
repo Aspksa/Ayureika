@@ -132,3 +132,9 @@ html[data-ay-theme="light"] .ay-settings-card-head{color:#30291c}
  .ay-settings-card-body button{max-width:100%;overflow-wrap:anywhere}
  .ay-settings-theme-preview{grid-template-columns:1fr}
 }
+
+/* Memory provenance remains readable on desktop and mobile. */
+.ay-memory-sources{border-top:1px solid #493b25;background:#15120d;color:#dcc38c;padding:7px 12px;max-height:160px;overflow:auto;font-size:12px}
+.ay-memory-sources summary{cursor:pointer;color:#f2d493}
+.ay-memory-sources p{margin:6px 0;overflow-wrap:anywhere}
+@media(max-width:639px){.ay-memory-sources{max-height:120px;font-size:11px}}
