@@ -148,6 +148,108 @@ resize.addEventListener("pointerdown",e=>{if(full||innerWidth<640)return;e.preve
  const up=()=>{window.removeEventListener("pointermove",move);window.removeEventListener("pointerup",up);frameSave();};
  window.addEventListener("pointermove",move);window.addEventListener("pointerup",up);
 });
+
+/* Settings layout adapted from JUUNIBI: navigation, search, collapsible cards and gold theme. */
+const settingsOpen = button("⚙", "Настройки Ayureika");
+head.insertBefore(settingsOpen, close);
+const settingsPage = document.createElement("section");
+settingsPage.className = "ay-settings-page"; settingsPage.hidden = true;
+settingsPage.setAttribute("aria-label", "Настройки Ayureika");
+const settingsHeader = document.createElement("header"); settingsHeader.className = "ay-settings-header";
+const settingsHeading = document.createElement("div");
+const settingsH1 = document.createElement("h1"); settingsH1.textContent = "Настройки";
+const settingsHint = document.createElement("p"); settingsHint.textContent = "Управление Ayureika · чёрно-золотое оформление";
+settingsHeading.append(settingsH1,settingsHint);
+const settingsExit = button("×", "Закрыть настройки");
+settingsHeader.append(settingsHeading,settingsExit);
+const settingsLayout = document.createElement("div"); settingsLayout.className = "ay-settings-layout";
+const settingsNav = document.createElement("aside"); settingsNav.className = "ay-settings-nav";
+const settingsSearch = document.createElement("input"); settingsSearch.type = "search"; settingsSearch.placeholder = "Найти настройку…"; settingsSearch.setAttribute("aria-label","Поиск по настройкам");
+const settingsLinks = document.createElement("nav"); settingsLinks.setAttribute("aria-label","Разделы настроек");
+settingsNav.append(settingsSearch,settingsLinks);
+const settingsContent = document.createElement("main"); settingsContent.className = "ay-settings-content";
+settingsLayout.append(settingsNav,settingsContent);settingsPage.append(settingsHeader,settingsLayout);document.body.append(settingsPage);
+type SettingsSection = { id:string; title:string; icon:string; description:string; items:string[] };
+const settingsSections:SettingsSection[] = [
+  {id:"conn",title:"Подключение",icon:"☁",description:"Подключение Cloud.ru и состояние сервера.",items:["Cloud.ru API","Статус соединения"]},
+  {id:"model",title:"Модель",icon:"✦",description:"Модели, доступные в чате.",items:["Основная модель","Поиск модели"]},
+  {id:"persona",title:"Инструкции",icon:"✎",description:"Пожелания к ответам помощницы.",items:["Стиль ответов","Инструкции"]},
+  {id:"memory",title:"Память",icon:"◈",description:"Параметры памяти и поиска.",items:["История диалогов","Смысловой поиск"]},
+  {id:"tools",title:"Инструменты",icon:"⚒",description:"Возможности и доступные инструменты.",items:["Инструменты помощницы"]},
+  {id:"quick",title:"Быстрые команды",icon:"⌘",description:"Короткие команды в чате.",items:["Команды через /"]},
+  {id:"look",title:"Внешний вид",icon:"◉",description:"Тема, цвет и оформление.",items:["Тема интерфейса","Цвет оформления","Скругление карточек","Масштаб интерфейса"]},
+  {id:"chat",title:"Чат",icon:"▤",description:"Отображение сообщений и окна чата.",items:["Плотность сообщений","Размер текста","Окно чата"]},
+  {id:"data",title:"Данные",icon:"▣",description:"История и сохранённые данные.",items:["История чатов","Резервные копии"]},
+  {id:"about",title:"О программе",icon:"ⓘ",description:"Информация о проекте.",items:["Ayureika","GitHub"]}
+];
+const collapsedKey="ayureika:settings:collapsed:v1";
+let collapsedIds:string[]=[];
+try{const saved=JSON.parse(localStorage.getItem(collapsedKey)||"[]");if(Array.isArray(saved))collapsedIds=saved.filter((x:unknown)=>typeof x==="string");}catch{}
+function settingsRow(label:string,detail:string):HTMLElement{
+ const row=document.createElement("div");row.className="ay-settings-row";
+ const text=document.createElement("strong");text.textContent=label;
+ const hint=document.createElement("small");hint.textContent=detail;
+ row.append(text,hint);return row;
+}
+const settingsCards=new Map<string,HTMLElement>();
+function addSettingsCard(sec:SettingsSection){
+ const card=document.createElement("section");card.className="ay-settings-card";card.id="ay-settings-"+sec.id;
+ const top=button("",sec.title);top.className="ay-settings-card-head";
+ const glyph=document.createElement("span");glyph.className="ay-settings-glyph";glyph.textContent=sec.icon;
+ const heading=document.createElement("span");heading.className="ay-settings-card-title";
+ const name=document.createElement("strong");name.textContent=sec.title;
+ const description=document.createElement("small");description.textContent=sec.description;
+ heading.append(name,description);
+ const chevron=document.createElement("span");chevron.textContent="⌄";top.append(glyph,heading,chevron);
+ const body=document.createElement("div");body.className="ay-settings-card-body";
+ const collapsed=collapsedIds.includes(sec.id);body.hidden=collapsed;card.classList.toggle("collapsed",collapsed);
+ top.setAttribute("aria-expanded",String(!collapsed));
+ top.onclick=()=>{const hide=!body.hidden;body.hidden=hide;card.classList.toggle("collapsed",hide);top.setAttribute("aria-expanded",String(!hide));
+ collapsedIds=hide?[...new Set([...collapsedIds,sec.id])]:collapsedIds.filter(id=>id!==sec.id);
+ try{localStorage.setItem(collapsedKey,JSON.stringify(collapsedIds));}catch{}};
+ if(sec.id==="look"){
+   const preview=document.createElement("div");preview.className="ay-settings-theme-preview";
+   for(const theme of ["Как в системе","Светлая","Тёмная"]){const tile=document.createElement("div");tile.className="ay-settings-theme-tile"+(theme==="Тёмная"?" active":"");
+    const miniature=document.createElement("span");miniature.className="ay-settings-theme-mini";tile.append(miniature,document.createTextNode(theme));preview.append(tile);}
+   body.append(settingsRow("Тема интерфейса","Предпросмотр вариантов JUUNIBI. В Ayureika закреплена чёрно-золотая тема."),preview);
+   const swatches=document.createElement("div");swatches.className="ay-settings-swatches";
+   for(const color of ["#caa65b","#6788bd","#9572bc","#579b82","#b76d6d"]){const dot=document.createElement("span");dot.style.background=color;dot.title=color;swatches.append(dot);}
+   body.append(settingsRow("Цвет оформления","Образцы цветовых акцентов JUUNIBI"),swatches);
+   body.append(settingsRow("Скругление и масштаб","Дизайн раздела; переключатели пока не подключены"));
+ }else if(sec.id==="model"){
+   body.append(settingsRow("Выбранная модель",modelSelect.value||"Модель не настроена"));
+   body.append(settingsRow("Список моделей","Доступен в заголовке чата, если модели заданы на сервере"));
+ }else if(sec.id==="chat"){
+   body.append(settingsRow("История переписок",String(chats.length)+" чатов в текущем браузере"));
+   body.append(settingsRow("Размер окна","Изменяется мышью за нижний угол окна чата"));
+   body.append(settingsRow("Шрифт и плотность","Визуальные образцы; настройка не подключена"));
+ }else if(sec.id==="conn"){
+   body.append(settingsRow("Состояние подключения","Реальный Cloud.ru API пока не подключён"));
+   body.append(settingsRow("Ключ API","Ввод ключа здесь не реализован; не храните ключ в браузере"));
+ }else if(sec.id==="data"){
+   body.append(settingsRow("Хранение переписок","В текущем браузере (localStorage)"));
+   body.append(settingsRow("Резервное копирование","Пока не реализовано"));
+ }else{
+   for(const item of sec.items)body.append(settingsRow(item,"Раздел дизайна JUUNIBI · функция пока не подключена"));
+ }
+ card.append(top,body);settingsContent.append(card);settingsCards.set(sec.id,card);
+ const nav=button(sec.icon+"  "+sec.title);nav.className="ay-settings-link";nav.dataset.section=sec.id;
+ nav.onclick=()=>{if(body.hidden)top.click();card.scrollIntoView({behavior:"smooth",block:"start"});settingsLinks.querySelectorAll("button").forEach(b=>b.classList.toggle("active",b===nav));};
+ settingsLinks.append(nav);
+}
+for(const section of settingsSections)addSettingsCard(section);
+settingsSearch.oninput=()=>{
+ const q=settingsSearch.value.toLocaleLowerCase("ru").replace(/ё/g,"е").trim();
+ for(const sec of settingsSections){const card=settingsCards.get(sec.id)!;const match=(sec.title+" "+sec.description+" "+sec.items.join(" ")+" "+card.textContent).toLocaleLowerCase("ru").replace(/ё/g,"е").includes(q);
+ card.hidden=!match;const nav=settingsLinks.querySelector<HTMLButtonElement>('[data-section="'+sec.id+'"]');if(nav)nav.hidden=!match;
+ if(q&&match&&card.classList.contains("collapsed")){const top=card.querySelector<HTMLButtonElement>(".ay-settings-card-head");top?.click();}
+ }
+};
+function showSettings(){settingsPage.hidden=false;panel.hidden=true;settingsSearch.focus();}
+function hideSettings(){settingsPage.hidden=true;}
+settingsOpen.onclick=showSettings;settingsExit.onclick=hideSettings;
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!settingsPage.hidden)hideSettings();if(e.ctrlKey&&e.key===","){e.preventDefault();showSettings();}});
+
 renderList();paint();
 let pos: { x: number; y: number } = { x: 1, y: 1 };
 try { const p = JSON.parse(localStorage.getItem(POS) || "null"); if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) pos = { x: Math.max(0, Math.min(1, p.x)), y: Math.max(0, Math.min(1, p.y)) }; } catch { /* no saved position */ }
