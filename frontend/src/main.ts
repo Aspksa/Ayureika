@@ -347,7 +347,7 @@ function addSettingsCard(sec:SettingsSection){
   body.append(link,settingsRow("Горячие клавиши","Ctrl+, — настройки · Escape — закрыть"));
  }
  card.append(top,body);settingsContent.append(card);settingsCards.set(sec.id,card);
- const nav=button(sec.icon+"  "+sec.title);nav.setAttribute("aria-label",sec.title);nav.className="ay-settings-link";nav.dataset.section=sec.id;nav.title=sec.title;nav.setAttribute("aria-label",sec.title);const glyph=document.createElement("span");glyph.className="ay-settings-link-glyph";glyph.textContent=sec.icon;const label=document.createElement("span");label.className="ay-settings-link-label";label.textContent=sec.title;nav.replaceChildren(glyph,label);
+ const nav=button(sec.icon+"  "+sec.title);nav.setAttribute("aria-label",sec.title);nav.className="ay-settings-link";nav.dataset.section=sec.id;nav.title=sec.title;nav.setAttribute("aria-label",sec.title);const navGlyph=document.createElement("span");navGlyph.className="ay-settings-link-glyph";navGlyph.textContent=sec.icon;const label=document.createElement("span");label.className="ay-settings-link-label";label.textContent=sec.title;nav.replaceChildren(navGlyph,label);
  nav.onclick=()=>{if(body.hidden)top.click();card.scrollIntoView({behavior:"smooth",block:"start"});settingsLinks.querySelectorAll("button").forEach(b=>b.classList.toggle("active",b===nav));};
  settingsLinks.append(nav);
 }
