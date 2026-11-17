@@ -15,6 +15,8 @@ function json(res,code,body){res.writeHead(code,{"Content-Type":"application/jso
 function body(req){return new Promise((resolve,reject)=>{let s="";req.on("data",c=>{s+=c;if(s.length>30e6){reject(new Error("Слишком большой запрос"));req.destroy();}});req.on("end",()=>{try{resolve(JSON.parse(s||"{}"));}catch{reject(new Error("Некорректный JSON"));}});req.on("error",reject);});}
 function baseUrl(endpoint){const u=new URL(endpoint);if(u.protocol!=="https:")throw new Error("Для API требуется HTTPS");if(u.username||u.password||u.hash)throw new Error("Некорректный URL API");return u.toString().replace(/\/$/,"");}
 function providerError(status){const names={400:"Неверный запрос к модели",401:"Неверный или просроченный API-ключ",402:"Недостаточно средств или доступ к оплате ограничен",403:"Доступ к модели запрещён",404:"Модель или метод API не найден",408:"Истекло время ожидания",422:"Неверные параметры модели",429:"Превышен лимит запросов",500:"Внутренняя ошибка Cloud.ru",502:"Ошибка шлюза Cloud.ru",503:"Сервис Cloud.ru временно недоступен",504:"Cloud.ru не ответил вовремя"};return (names[status]||"Ошибка Cloud.ru")+" (HTTP "+status+")";}
+function networkError(e){if(e?.name==="TimeoutError"||e?.name==="AbortError")return "Превышено время ожидания Cloud.ru (90 секунд)";return "Сетевая ошибка Cloud.ru: "+(e instanceof Error?e.message:"неизвестная ошибка");}
+async function cloudError(response){let detail="";try{const raw=(await response.text()).slice(0,1600);try{const data=JSON.parse(raw);const value=data?.error?.message||data?.message||data?.detail;detail=typeof value==="string"?value:"";}catch{} }catch{}return providerError(response.status)+(detail?" · "+detail.replace(/[\\r\\n]+/g," ").slice(0,300):"");}
 function modelCapabilities(m){const name=typeof m?.id==="string"?m.id:"";const meta=m&&typeof m==="object"?m:{};const flag=(keys)=>{for(const k of keys)if(typeof meta[k]==="boolean")return meta[k];return null;};return {id:name,streaming:flag(["supports_streaming","streaming"]),tools:flag(["supports_tools","tool_calls","function_calling"]),embeddings:flag(["supports_embeddings","embeddings"]),source:"Метаданные /models; неизвестно означает не проверено"};}
 function auth(c){return c.apiKey||process.env.CLOUD_RU_API_KEY||"";}
 async function remote(c,route,options={}){
@@ -166,16 +168,35 @@ async function handler(req,res){
     }catch(e){return json(res,502,{error:"Инструмент выполнен, но продолжение ответа не удалось: "+(e instanceof Error?e.message:"ошибка"),toolResult:result});}
    }
    if(pathname==="/api/cloud/check"&&req.method==="GET"){
-    const c=load();if(!auth(c))return json(res,200,{ok:false,error:"Укажите API-ключ Cloud.ru",code:"NO_KEY"});
-    try{const r=await remote(c,"/models");if(!r.ok)return json(res,200,{ok:false,error:providerError(r.status),status:r.status});
-     const d=await r.json();if(!Array.isArray(d.data))return json(res,200,{ok:false,error:"Неожиданный формат списка моделей"});
-     return json(res,200,{ok:true,models:d.data.length,selectedModel:c.model,modelAvailable:!c.model||d.data.some(x=>x.id===c.model)});
-    }catch(e){return json(res,200,{ok:false,error:e instanceof Error?e.name==="TimeoutError"?"Cloud.ru не ответил за 90 секунд":"Сетевая ошибка: "+e.message:"Ошибка сети"});}
+    const c=load();if(!auth(c))return json(res,200,{ok:false,stage:"key",code:"NO_KEY",error:"Укажите API-ключ Cloud.ru"});
+    try{
+     const r=await remote(c,"/models");if(!r.ok)return json(res,200,{ok:false,stage:"models",status:r.status,error:await cloudError(r)});
+     const d=await r.json();if(!Array.isArray(d.data))return json(res,200,{ok:false,stage:"models",error:"Cloud.ru вернул неожиданный формат списка моделей"});
+     const available=d.data.filter(x=>typeof x?.id==="string").map(x=>x.id);
+     return json(res,200,{ok:true,stage:"models",models:available.length,selectedModel:c.model,modelAvailable:Boolean(c.model&&available.includes(c.model)),modelConfigured:Boolean(c.model),message:c.model?(available.includes(c.model)?"Модель найдена. Для проверки ответов запустите тест чата.":"Модель не найдена в списке Cloud.ru. Проверьте её идентификатор."):"Выберите модель для чата."});
+    }catch(e){return json(res,200,{ok:false,stage:"network",error:networkError(e)});}
+   }
+   if(pathname==="/api/cloud/test"&&req.method==="POST"){
+    const c=load();if(!auth(c))return json(res,200,{ok:false,stage:"key",error:"Укажите API-ключ Cloud.ru"});
+    if(!c.model)return json(res,200,{ok:false,stage:"model",error:"Выберите основную модель"});
+    try{
+     const r=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify({model:c.model,messages:[{role:"user",content:"Ответь одним словом: OK"}],stream:false,max_tokens:16})});
+     if(!r.ok)return json(res,200,{ok:false,stage:"chat",status:r.status,error:await cloudError(r)});
+     const d=await r.json();const answer=d.choices?.[0]?.message?.content;
+     if(typeof answer!=="string"||!answer.trim())return json(res,200,{ok:false,stage:"chat",error:"Cloud.ru ответил, но не вернул текст сообщения"});
+     trackUsage(d);return json(res,200,{ok:true,stage:"chat",model:c.model,message:"Тестовый ответ модели получен",reply:answer.slice(0,100)});
+    }catch(e){return json(res,200,{ok:false,stage:"network",error:networkError(e)});}
    }
    if(pathname==="/api/cloud/models"&&req.method==="GET"){
-    const c=load();let models=(process.env.CLOUD_RU_MODELS||"").split(",").map(s=>s.trim()).filter(Boolean);
-    let warning="",remoteMetadata=[];if(c.endpoint&&auth(c)){try{const upstream=await remote(c,"/models");if(upstream.ok){const d=await upstream.json();if(Array.isArray(d.data)){remoteMetadata=d.data;models=[...new Set([...models,...d.data.map(x=>x.id).filter(x=>typeof x==="string")])];}}else warning=providerError(upstream.status);}catch(e){warning="Не удалось получить модели: "+(e instanceof Error?e.message:"ошибка сети");}}
-    return json(res,200,{models:[...new Set([c.model,c.fallbackModel,...models].filter(Boolean))],capabilities:remoteMetadata.map(modelCapabilities),configured:Boolean(c.endpoint&&auth(c)),warning});
+    const c=load();const manual=[c.model,c.fallbackModel,...(process.env.CLOUD_RU_MODELS||"").split(",")].filter(x=>typeof x==="string"&&x.trim()).map(x=>x.trim());
+    let available=[],warning="",capabilities=[];
+    if(c.endpoint&&auth(c)){try{
+     const upstream=await remote(c,"/models");
+     if(upstream.ok){const d=await upstream.json();if(Array.isArray(d.data)){const rows=d.data.filter(x=>typeof x?.id==="string");available=[...new Set(rows.map(x=>x.id))];capabilities=rows.map(modelCapabilities);}else warning="Неожиданный формат ответа Cloud.ru";}
+     else warning=await cloudError(upstream);
+    }catch(e){warning=networkError(e);}}
+    else warning="Укажите API-ключ Cloud.ru для получения доступных моделей";
+    return json(res,200,{models:available,available,manual:[...new Set(manual.filter(x=>!available.includes(x)))],capabilities,configured:Boolean(c.endpoint&&auth(c)),warning});
    }
    if(pathname==="/api/health"&&req.method==="GET"){const c=load();return json(res,200,{server:true,endpointConfigured:Boolean(c.endpoint),keyConfigured:Boolean(auth(c)),modelConfigured:Boolean(c.model)});}
    if(pathname==="/api/chat/stream"&&req.method==="POST"){
@@ -191,7 +212,7 @@ async function handler(req,res){
     const model=typeof input.model==="string"&&input.model?input.model:c.model;
     let upstream=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify({model,messages,stream:true})});
     if(!upstream.ok&&[429,500,502,503,504].includes(upstream.status)&&c.fallbackModel&&model!==c.fallbackModel)upstream=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify({model:c.fallbackModel,messages,stream:true})});
-    if(!upstream.ok)return json(res,502,{error:providerError(upstream.status)});
+    if(!upstream.ok)return json(res,502,{error:await cloudError(upstream)});
     if(!upstream.body)return json(res,502,{error:"Cloud.ru не предоставил поток ответа"});
     res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8","Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no","X-Content-Type-Options":"nosniff"});
     const reader=upstream.body.getReader(),decoder=new TextDecoder();let buffer="";
