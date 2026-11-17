@@ -5,7 +5,10 @@ foreach ($base in @($env:LOCALAPPDATA, $env:ProgramFiles)) {
   if (-not $base) { continue }
   $dir = Join-Path $base 'Programs\Python'
   if (Test-Path -LiteralPath $dir) {
-    Get-ChildItem -LiteralPath $dir -Filter python.exe -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { $paths.Add($_.FullName) }
+    Get-ChildItem -LiteralPath $dir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+      $candidate = Join-Path $_.FullName 'python.exe'
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) { $paths.Add($candidate) }
+    }
   }
 }
 foreach ($exe in @('python.exe','python3.exe')) {
@@ -15,9 +18,9 @@ foreach ($exe in @('python.exe','python3.exe')) {
 $selected = $null
 foreach ($exe in @($paths | Select-Object -Unique)) {
   try {
-    $version = & $exe -c 'import sys; print(".".join(map(str,sys.version_info[:3]))); sys.exit(0 if sys.version_info >= (3,9) else 1)' 2>&1
+    $version = & $exe -c 'import sys;sys.exit(sys.version_info<(3,9))' 2>&1
     if ($LASTEXITCODE -eq 0) {
-      Write-Host "Python OK: $exe ($version)"
+      Write-Host "Python OK: $exe"
       $selected = $exe
       break
     }
