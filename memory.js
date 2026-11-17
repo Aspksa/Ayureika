@@ -14,6 +14,9 @@ const reviewInsert=db.prepare("INSERT OR IGNORE INTO memory_review(first_id,seco
 function tokens(text){return new Set((text.toLocaleLowerCase("ru").match(/[\p{L}\p{N}]{3,}/gu)||[]).filter(w=>!["это","для","что","как","или","при","его","она"].includes(w)));}
 function overlap(a,b){const x=tokens(a),y=tokens(b);if(!x.size||!y.size)return 0;let n=0;for(const w of x)if(y.has(w))n++;return n/Math.max(x.size,y.size);}
 function reviewFact(id,content){for(const row of listStmt.all(100)){if(row.id===id)continue;const score=overlap(content,row.content);if(score>=0.65){const ids=[id,row.id].sort();reviewInsert.run(ids[0],ids[1],/\b(?:не|нет|без)\b/iu.test(content)!==/\b(?:не|нет|без)\b/iu.test(row.content)?"possible_conflict":"similar");}}}
+const reviewCountStmt=db.prepare("SELECT COUNT(*) AS n FROM memory_review WHERE status='pending'");
+const pendingVectorsStmt=db.prepare("SELECT COUNT(*) AS n FROM memories m LEFT JOIN memory_vectors v ON v.id=m.id AND v.model=? WHERE v.id IS NULL");
+function pendingVectors(model){return model?pendingVectorsStmt.get(model).n:0;}
 function reviews(limit=30){return db.prepare("SELECT r.id,r.kind,r.status,a.content AS first_content,b.content AS second_content FROM memory_review r JOIN memories a ON a.id=r.first_id JOIN memories b ON b.id=r.second_id WHERE r.status='pending' ORDER BY r.id DESC LIMIT ?").all(Math.min(100,Math.max(1,limit)));}
 function reviewDecision(id,status){if(!Number.isInteger(id)||!["dismissed","reviewed"].includes(status))throw Error("Неверное решение");return db.prepare("UPDATE memory_review SET status=? WHERE id=?").run(status,id).changes>0;}
 function versions(id){if(typeof id!=="string"||!/^[a-f0-9]{64}$/.test(id))throw Error("Неверный идентификатор");return db.prepare("SELECT content,action,created_at FROM memory_versions WHERE memory_id=? ORDER BY id DESC LIMIT 100").all(id);}
@@ -47,7 +50,7 @@ function extractExplicit(message){
  return match?match[1].trim():null;
 }
 function count(){return db.prepare("SELECT COUNT(*) AS total FROM memories").get().total;}
-function stats(model=""){const count=db.prepare("SELECT COUNT(*) AS n FROM memories").get().n;const indexed=model?db.prepare("SELECT COUNT(*) AS n FROM memory_vectors WHERE model=?").get(model).n:0;const audits=db.prepare("SELECT COUNT(*) AS n FROM tool_audit").get().n;return {count,indexed,audits,model};}
+function stats(model=""){const count=db.prepare("SELECT COUNT(*) AS n FROM memories").get().n;const indexed=model?db.prepare("SELECT COUNT(*) AS n FROM memory_vectors WHERE model=?").get(model).n:0;const audits=db.prepare("SELECT COUNT(*) AS n FROM tool_audit").get().n;return {count,indexed,audits,model,pendingVectors:pendingVectors(model),pendingReviews:reviewCountStmt.get().n};}
 function importFacts(items){if(!Array.isArray(items)||items.length>1000)throw Error("Некорректное количество записей");const facts=items.map(x=>normalize(x));db.exec("BEGIN");try{for(const fact of facts)remember(fact);db.exec("COMMIT");}catch(e){db.exec("ROLLBACK");throw e;}return facts.length;}
 function list(){return listStmt.all(100);}
 function forget(id){if(typeof id!=="string"||!/^[a-f0-9]{64}$/.test(id))throw Error("Некорректный идентификатор");const deleted=deleteStmt.run(id).changes>0;if(deleted){db.prepare("DELETE FROM memory_vectors WHERE id=?").run(id);db.prepare("DELETE FROM memory_review WHERE first_id=? OR second_id=?").run(id,id);}return deleted;}
@@ -61,4 +64,4 @@ function term(){let v=factor();while(["*","/","%"].includes(tokens[i])){const op
 function sum(){let v=term();while(["+","-"].includes(tokens[i])){const op=tokens[i++];v=op==="+"?v+term():v-term();}return v;}
 const value=sum();if(i!==tokens.length||!Number.isFinite(value))throw Error("Некорректное вычисление");output=String(value);}
 auditStmt.run(name,String(input).slice(0,500),String(output).slice(0,4000));return {name,output};}
-module.exports={remember,search,relevant,extractExplicit,count,list,forget,execute,putVector,missingVectors,semantic,stats,importFacts,reviews,reviewDecision,versions,revise,logs:()=>logsStmt.all()};
+module.exports={remember,search,relevant,extractExplicit,count,list,forget,execute,putVector,missingVectors,semantic,stats,pendingVectors,importFacts,reviews,reviewDecision,versions,revise,logs:()=>logsStmt.all()};
