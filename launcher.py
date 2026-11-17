@@ -253,6 +253,8 @@ def main():
         verify_frontend(web_port, html)
         url = "http://127.0.0.1:%s/" % web_port
         print("Ayureika готова:", url)
+        if os.environ.get("AYUREIKA_CI_CHECK") == "1":
+            return
         webbrowser.open(url)
         print("Для остановки нажмите Ctrl+C.")
         while api.poll() is None and web.poll() is None:
