@@ -35,3 +35,25 @@ jobs:
           $env:AYUREIKA_CI_CHECK = '1'
           & $script
           if ($LASTEXITCODE -ne 0) { throw "BAT failed: $LASTEXITCODE" }
+      - name: Print startup diagnostics on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          foreach ($folder in @($env:GITHUB_WORKSPACE, (Join-Path $env:RUNNER_TEMP 'Ayureika тест & (x)'))) {
+            foreach ($file in @('logs/startup.log', 'logs/api.log', 'logs/web.log')) {
+              $path = Join-Path $folder $file
+              if (Test-Path -LiteralPath $path) {
+                Write-Host "==== $path ===="
+                Get-Content -LiteralPath $path -Tail 100
+              }
+            }
+          }
+      - name: Upload startup logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ayureika-windows-logs-${{ matrix.python-version }}
+          path: |
+            logs/*.log
+            ${{ runner.temp }}/Ayureika тест & (x)/logs/*.log
+          if-no-files-found: ignore
