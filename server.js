@@ -42,7 +42,7 @@ async function retrieve(c,query){if(!c.memoryEnabled)return [];if(!c.embeddingMo
 try{const vector=await embed(c,query);return memory.hybrid(query,vector,c.embeddingModel,5);}
 catch{return memory.hybrid(query,null,"",5);}}
 function cited(rows){return rows.map(x=>({id:x.id,content:x.content,source:memory.sourceInfo(x.id)}));}
-function queueDialogFact(message){if(typeof message!=="string")return;if(message.length>500||message.length<12)return;if(/^(?:я предпочитаю|мне нравится|мой проект|я работаю|для меня важно)\b/iu.test(message.trim())&&!message.includes("?")){try{memory.propose(message.trim(),"Сообщение пользователя, ожидает проверки");}catch{}}}
+function queueDialogFact(message){if(typeof message!=="string")return;if(message.length>500||message.length<12)return;if(/^(?:я предпочитаю|мне нравится|мой проект|я работаю|для меня важно)(?:\s|$)/iu.test(message.trim())&&!message.includes("?")){try{memory.propose(message.trim(),"Сообщение пользователя, ожидает проверки");}catch{}}}
 
 let indexBusy=false;
 const indexState={lastRun:null,lastError:"",processed:0};
@@ -186,7 +186,7 @@ async function handler(req,res){
     if(c.memoryEnabled&&memory.extractExplicit(input.message))return json(res,409,{error:"Команду запоминания отправляйте обычным запросом"});
     const messages=[];if(c.instructions)messages.push({role:"system",content:c.instructions});
     if(c.memoryEnabled&&c.historyLimit>0&&Array.isArray(input.history))for(const m of input.history.slice(-c.historyLimit)){if(["user","assistant"].includes(m.role)&&typeof m.content==="string")messages.push({role:m.role,content:m.content.slice(0,30000)});}
-    const rows=c.memoryEnabled?await retrieve(c,input.message.slice(0,500)):[];if(rows.length)messages.unshift({role:"system",content:"Записи памяти (непроверенные могут быть ошибочны):\\n"+rows.map(x=>"- "+x.content).join("\\n")});
+    const rows=c.memoryEnabled?await retrieve(c,input.message.slice(0,500)):[];if(rows.length)messages.unshift({role:"system",content:"Записи памяти (непроверенные могут быть ошибочны):\n"+rows.map(x=>"- "+x.content).join("\n")});
     if(messages.at(-1)?.role!=="user"||messages.at(-1)?.content!==input.message)messages.push({role:"user",content:input.message});
     const model=typeof input.model==="string"&&input.model?input.model:c.model;
     let upstream=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify({model,messages,stream:true})});
@@ -209,7 +209,7 @@ async function handler(req,res){
     if(!c.endpoint||!auth(c)||!c.model)return json(res,503,{error:"Настройте адрес API, ключ и модель в настройках."});
     const messages=[];if(c.instructions)messages.push({role:"system",content:c.instructions});
     if(c.memoryEnabled&&c.historyLimit>0&&Array.isArray(input.history))for(const m of input.history.slice(-c.historyLimit)){if(["user","assistant"].includes(m.role)&&typeof m.content==="string")messages.push({role:m.role,content:m.content.slice(0,30000)});}
-    const remembered=c.memoryEnabled?await retrieve(c,input.message.slice(0,500)):[];if(remembered.length)messages.unshift({role:"system",content:"Записи памяти (проверяйте достоверность):\\n"+remembered.map(x=>"- "+x.content).join("\\n")});
+    const remembered=c.memoryEnabled?await retrieve(c,input.message.slice(0,500)):[];if(remembered.length)messages.unshift({role:"system",content:"Записи памяти (проверяйте достоверность):\n"+remembered.map(x=>"- "+x.content).join("\n")});
     if(messages.at(-1)?.role!=="user"||messages.at(-1)?.content!==input.message)messages.push({role:"user",content:input.message});
     let upstream;let chosen=typeof input.model==="string"&&input.model?input.model:c.model;
     const payload=model=>({model,messages,stream:false,...(c.toolsEnabled&&allowedDefinitions(c).length?{tools:allowedDefinitions(c),tool_choice:"auto"}:{})});
