@@ -23,3 +23,10 @@ test("tool execution requires confirmation",()=>{
  assert.equal(memory.execute("calculator","2+2",true).output,"4");
  assert.throws(()=>memory.execute("shell","dir",true),/не разрешён/);
 });
+
+test("semantic memory ranks matching embeddings",()=>{
+ const fact=memory.remember("Уникальный смысловой факт "+Date.now());
+ try{memory.putVector(fact.id,"test-model",[1,0,0]);const rows=memory.semantic("test-model",[1,0,0],5);assert.ok(rows.some(row=>row.id===fact.id&&row.score>0.99));}
+ finally{memory.forget(fact.id);}
+});
+test("rejects invalid embeddings",()=>{assert.throws(()=>memory.putVector("a".repeat(64),"test-model",[1,NaN]),/вектор/);});
