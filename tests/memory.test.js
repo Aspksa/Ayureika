@@ -74,3 +74,44 @@ test("index queue and review counters reflect SQLite records",()=>{
   assert.ok(Number.isInteger(memory.stats().pendingReviews));
  }finally{memory.forget(row.id);}
 });
+
+test("hybrid retrieval combines lexical and vector matches",()=>{
+ const fact=memory.remember("Уникальная спецификация оборудования "+Date.now());
+ try{memory.putVector(fact.id,"hybrid-test",[1,0,0]);assert.ok(memory.hybrid("спецификация",[1,0,0],"hybrid-test",10).some(x=>x.id===fact.id));}
+ finally{memory.forget(fact.id);}
+});
+test("automatic suggestions require explicit approval",()=>{
+ const phrase="Мой проект тестовых данных "+Date.now();
+ memory.propose(phrase,"unit-test");
+ const row=memory.candidates(100).find(x=>x.content===phrase);
+ assert.ok(row);assert.equal(memory.search(phrase).length,0);
+ assert.equal(memory.decideCandidate(row.id,true).approved,true);
+ const found=memory.search(phrase);assert.equal(found.length,1);memory.forget(found[0].id);
+});
+test("links, sources and versions survive full backup restore",()=>{
+ const stamp=Date.now();
+ const a=memory.remember("Документ поставки "+stamp),b=memory.remember("Решение согласовать "+stamp);
+ try{
+  memory.link(a.id,b.id,"decision");memory.annotate(a.id,"Проверка пользователя","user_confirmed");
+  const copy=memory.fullBackup();assert.equal(copy.version,2);
+  assert.ok(copy.tables.memory_links.some(x=>x.from_id===a.id&&x.to_id===b.id));
+  assert.ok(copy.tables.memory_versions.some(x=>x.memory_id===a.id));
+  assert.equal(copy.tables.memory_sources.find(x=>x.memory_id===a.id).confidence,"user_confirmed");
+  memory.forget(a.id);memory.forget(b.id);
+  const result=memory.restoreFull(copy);assert.ok(result.imported>=2);
+  assert.equal(memory.links(a.id).length,1);
+  assert.equal(memory.sourceInfo(a.id).confidence,"user_confirmed");
+  assert.ok(memory.search(String(stamp)).length>=2);
+ }finally{memory.forget(a.id);memory.forget(b.id);}
+});
+test("maintenance creates a report without changing facts",()=>{
+ const before=memory.stats().count;
+ const report=memory.maintenance();
+ assert.equal(report.memories,before);assert.equal(memory.stats().count,before);
+ assert.ok(memory.journal().some(x=>x.action==="maintenance"));
+});
+test("malformed full backup fails before modifying database",()=>{
+ const before=memory.stats().count;
+ assert.throws(()=>memory.restoreFull({kind:"ayureika-sqlite-backup",version:2,tables:{memories:[]}}),/таблица/);
+ assert.equal(memory.stats().count,before);
+});
