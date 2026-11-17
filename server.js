@@ -79,7 +79,17 @@ async function handler(req,res){
    if(pathname==="/api/data/import"&&req.method==="POST"){
     const input=await body(req);if(input.confirm!==true||input.kind!=="ayureika-server-backup"||input.version!==1)return json(res,400,{error:"Неверная резервная копия или нет подтверждения"});
     if(!Array.isArray(input.facts)||input.facts.length>100)return json(res,400,{error:"Неверный список памяти"});
-    const count=memory.importFacts(input.facts);return json(res,200,{imported:count});
+    const safe=input.settings;
+    const patch={};
+    if(safe&&typeof safe==="object"&&!Array.isArray(safe)){
+     for(const key of ["endpoint","model","fallbackModel","embeddingModel","instructions"]){if(Object.hasOwn(safe,key)){if(typeof safe[key]!=="string"||safe[key].length>(key==="instructions"?6000:500))throw Error("Неверные настройки: "+key);patch[key]=safe[key];}}
+     for(const key of ["memoryEnabled","toolsEnabled","streamEnabled"]){if(Object.hasOwn(safe,key)){if(typeof safe[key]!=="boolean")throw Error("Неверные настройки: "+key);patch[key]=safe[key];}}
+     if(Object.hasOwn(safe,"historyLimit")){if(!Number.isInteger(safe.historyLimit)||safe.historyLimit<0||safe.historyLimit>20)throw Error("Неверный лимит истории");patch.historyLimit=safe.historyLimit;}
+     if(Object.hasOwn(safe,"allowedTools")){if(!Array.isArray(safe.allowedTools)||safe.allowedTools.some(x=>!["calculator","clock","memory_search"].includes(x))||new Set(safe.allowedTools).size!==safe.allowedTools.length)throw Error("Неверные разрешения");patch.allowedTools=safe.allowedTools;}
+     if(Object.hasOwn(safe,"quickCommands")){if(!Array.isArray(safe.quickCommands)||safe.quickCommands.length>30||safe.quickCommands.some(x=>!x||typeof x.name!=="string"||typeof x.text!=="string"||x.name.length>32||x.text.length>2000))throw Error("Неверные команды");patch.quickCommands=safe.quickCommands;}
+     if(patch.endpoint)baseUrl(patch.endpoint);
+    }
+    const count=memory.importFacts(input.facts);if(Object.keys(patch).length)save({...load(),...patch});return json(res,200,{imported:count,settingsRestored:Object.keys(patch).length>0});
    }
    if(pathname==="/api/memory"&&req.method==="GET")return json(res,200,{items:memory.list()});
    if(pathname==="/api/memory"&&req.method==="POST"){const c=load();if(!c.memoryEnabled)return json(res,403,{error:"Память отключена"});const input=await body(req);return json(res,200,memory.remember(input.content));}
