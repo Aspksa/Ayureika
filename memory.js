@@ -37,8 +37,10 @@ function extractExplicit(message){
  return match?match[1].trim():null;
 }
 function count(){return db.prepare("SELECT COUNT(*) AS total FROM memories").get().total;}
+function stats(model=""){const count=db.prepare("SELECT COUNT(*) AS n FROM memories").get().n;const indexed=model?db.prepare("SELECT COUNT(*) AS n FROM memory_vectors WHERE model=?").get(model).n:0;const audits=db.prepare("SELECT COUNT(*) AS n FROM tool_audit").get().n;return {count,indexed,audits,model};}
+function importFacts(items){if(!Array.isArray(items)||items.length>1000)throw Error("Некорректное количество записей");const facts=items.map(x=>normalize(x));db.exec("BEGIN");try{for(const fact of facts)remember(fact);db.exec("COMMIT");}catch(e){db.exec("ROLLBACK");throw e;}return facts.length;}
 function list(){return listStmt.all(100);}
-function forget(id){if(typeof id!=="string"||!/^[a-f0-9]{64}$/.test(id))throw Error("Некорректный идентификатор");return deleteStmt.run(id).changes>0;}
+function forget(id){if(typeof id!=="string"||!/^[a-f0-9]{64}$/.test(id))throw Error("Некорректный идентификатор");const deleted=deleteStmt.run(id).changes>0;if(deleted)db.prepare("DELETE FROM memory_vectors WHERE id=?").run(id);return deleted;}
 function execute(name,input,approved){if(!approved)throw Error("Требуется подтверждение пользователя");if(!["calculator","memory_search","clock"].includes(name))throw Error("Инструмент не разрешён");
 let output;
 if(name==="clock")output=new Date().toISOString();
@@ -49,4 +51,4 @@ function term(){let v=factor();while(["*","/","%"].includes(tokens[i])){const op
 function sum(){let v=term();while(["+","-"].includes(tokens[i])){const op=tokens[i++];v=op==="+"?v+term():v-term();}return v;}
 const value=sum();if(i!==tokens.length||!Number.isFinite(value))throw Error("Некорректное вычисление");output=String(value);}
 auditStmt.run(name,String(input).slice(0,500),String(output).slice(0,4000));return {name,output};}
-module.exports={remember,search,relevant,extractExplicit,count,list,forget,execute,putVector,missingVectors,semantic,logs:()=>logsStmt.all()};
+module.exports={remember,search,relevant,extractExplicit,count,list,forget,execute,putVector,missingVectors,semantic,stats,importFacts,logs:()=>logsStmt.all()};

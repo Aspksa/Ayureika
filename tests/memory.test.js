@@ -30,3 +30,15 @@ test("semantic memory ranks matching embeddings",()=>{
  finally{memory.forget(fact.id);}
 });
 test("rejects invalid embeddings",()=>{assert.throws(()=>memory.putVector("a".repeat(64),"test-model",[1,NaN]),/вектор/);});
+
+test("memory statistics and safe backup import",()=>{
+ const fact="Резервная копия Ayureika "+Date.now();
+ const before=memory.stats().count;
+ assert.equal(memory.importFacts([fact,fact]),2);
+ const found=memory.search(fact);
+ assert.equal(found.length,1);
+ assert.equal(memory.stats().count,before+1);
+ assert.ok(memory.forget(found[0].id));
+ assert.equal(memory.stats().count,before);
+ assert.throws(()=>memory.importFacts(["", "valid"]),/Текст/);
+});

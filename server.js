@@ -6,9 +6,10 @@ const root=path.resolve(__dirname,"frontend");
 const dataDir=path.join(__dirname,"data");
 const configPath=path.join(dataDir,"cloudru-settings.json");
 const types={".png":"image/png",".webp":"image/webp",".jpg":"image/jpeg",".html":"text/html; charset=utf-8",".css":"text/css; charset=utf-8",".js":"text/javascript; charset=utf-8"};
-const defaults={endpoint:"https://foundation-models.api.cloud.ru/v1",model:"",fallbackModel:"",apiKey:"",instructions:"",memoryEnabled:true,toolsEnabled:false,quickCommands:[],embeddingModel:""};
+const defaults={endpoint:"https://foundation-models.api.cloud.ru/v1",model:"",fallbackModel:"",apiKey:"",instructions:"",memoryEnabled:true,toolsEnabled:false,quickCommands:[],embeddingModel:"",streamEnabled:true,historyLimit:20,allowedTools:["calculator","clock","memory_search"]};
 function load(){try{return {...defaults,...JSON.parse(fs.readFileSync(configPath,"utf8"))};}catch{return {...defaults};}}
 function save(config){fs.mkdirSync(dataDir,{recursive:true});const tmp=configPath+".tmp";fs.writeFileSync(tmp,JSON.stringify(config,null,2),{mode:0o600});fs.renameSync(tmp,configPath);}
+function toolAllowed(c,name){return c.toolsEnabled&&Array.isArray(c.allowedTools)&&c.allowedTools.includes(name)&&["calculator","clock","memory_search"].includes(name);}
 function publicConfig(c){const {apiKey,...safe}=c;return {...safe,keyConfigured:Boolean(apiKey||process.env.CLOUD_RU_API_KEY)};}
 function json(res,code,body){res.writeHead(code,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"});res.end(JSON.stringify(body));}
 function body(req){return new Promise((resolve,reject)=>{let s="";req.on("data",c=>{s+=c;if(s.length>2e6){reject(new Error("Слишком большой запрос"));req.destroy();}});req.on("end",()=>{try{resolve(JSON.parse(s||"{}"));}catch{reject(new Error("Некорректный JSON"));}});req.on("error",reject);});}
@@ -17,6 +18,7 @@ function providerError(status){const names={400:"Неверный запрос �
 function auth(c){return c.apiKey||process.env.CLOUD_RU_API_KEY||"";}
 async function remote(c,route,options={}){const url=baseUrl(c.endpoint)+route;const r=await fetch(url,{...options,headers:{"Authorization":"Bearer "+auth(c),"Content-Type":"application/json",...(options.headers||{})},signal:AbortSignal.timeout(90000)});return r;}
 const pendingTools=new Map();
+function allowedDefinitions(c){return toolDefs.filter(x=>toolAllowed(c,x.function.name));}
 const toolDefs=[{type:"function",function:{name:"calculator",description:"Вычислить арифметическое выражение",parameters:{type:"object",properties:{input:{type:"string"}},required:["input"]}}},{type:"function",function:{name:"clock",description:"Получить текущее время UTC",parameters:{type:"object",properties:{input:{type:"string"}}}}},{type:"function",function:{name:"memory_search",description:"Поиск по сохранённой памяти",parameters:{type:"object",properties:{input:{type:"string"}},required:["input"]}}}];
 async function embed(c,text){if(!c.embeddingModel)throw Error("Не выбрана модель embeddings");const r=await remote(c,"/embeddings",{method:"POST",body:JSON.stringify({model:c.embeddingModel,input:text})});if(!r.ok)throw Error("Embeddings API: "+r.status);const d=await r.json();const v=d.data?.[0]?.embedding;if(!Array.isArray(v))throw Error("Нет вектора в ответе embeddings");return v;}
 async function retrieve(c,query){if(!c.memoryEnabled)return [];if(!c.embeddingModel)return memory.relevant(query,5);
@@ -31,7 +33,7 @@ function stageTool(c,model,messages,answer,step){
  if(calls.length!==1)throw Error("Поддерживается один инструмент за шаг");
  if(step>=3)throw Error("Превышен лимит трёх вызовов инструментов за ответ");
  const call=calls[0],name=call?.function?.name;
- if(!["calculator","clock","memory_search"].includes(name))throw Error("Инструмент не разрешён");
+ if(!toolAllowed(c,name))throw Error("Инструмент не разрешён");
  if(typeof call.id!=="string"||!call.id||call.id.length>150)throw Error("Неверный идентификатор вызова");
  let args;try{args=JSON.parse(call.function.arguments||"{}");}catch{throw Error("Некорректные аргументы инструмента");}
  if(!args||typeof args!=="object"||Array.isArray(args))throw Error("Некорректные аргументы");
@@ -44,7 +46,7 @@ function stageTool(c,model,messages,answer,step){
  return {confirmation:{id,name,input:value}};
 }
 async function complete(c,model,messages){
- const payload={model,messages,stream:false,...(c.toolsEnabled?{tools:toolDefs,tool_choice:"auto"}:{})};
+ const payload={model,messages,stream:false,...(c.toolsEnabled&&allowedDefinitions(c).length?{tools:allowedDefinitions(c),tool_choice:"auto"}:{})};
  let response=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify(payload)});
  if(!response.ok)throw Error("Провайдер ИИ вернул ошибку "+response.status);
  return response.json();
@@ -55,16 +57,39 @@ async function handler(req,res){
   try{
    if(pathname==="/api/settings"&&req.method==="GET")return json(res,200,publicConfig(load()));
    if(pathname==="/api/settings"&&req.method==="PATCH"){
-    const patch=await body(req),allowed=["endpoint","model","fallbackModel","instructions","memoryEnabled","toolsEnabled","quickCommands","embeddingModel","apiKey"];const c=load();
+    const patch=await body(req),allowed=["endpoint","model","fallbackModel","instructions","memoryEnabled","toolsEnabled","quickCommands","embeddingModel","streamEnabled","historyLimit","allowedTools","apiKey"];const c=load();
     for(const key of allowed)if(Object.hasOwn(patch,key)){
      const v=patch[key];
      if(key==="apiKey"){if(typeof v!=="string"||v.length>4096)throw Error("Неверный ключ");if(v)c.apiKey=v;else if(patch.clearApiKey===true)c.apiKey="";}
-     else if(["memoryEnabled","toolsEnabled"].includes(key)){if(typeof v!=="boolean")throw Error("Ожидалось да/нет");c[key]=v;}
+     else if(["memoryEnabled","toolsEnabled","streamEnabled"].includes(key)){if(typeof v!=="boolean")throw Error("Ожидалось да/нет");c[key]=v;}
+     else if(key==="historyLimit"){if(!Number.isInteger(v)||v<0||v>20)throw Error("История: от 0 до 20 сообщений");c[key]=v;}
+     else if(key==="allowedTools"){if(!Array.isArray(v)||v.length>3||v.some(x=>!["calculator","clock","memory_search"].includes(x))||new Set(v).size!==v.length)throw Error("Недопустимые разрешения инструментов");c[key]=v;}
      else if(key==="quickCommands"){if(!Array.isArray(v)||v.length>30||v.some(x=>typeof x.name!=="string"||typeof x.text!=="string"||x.name.length>32||x.text.length>2000))throw Error("Неверные команды");c[key]=v;}
      else{if(typeof v!=="string"||v.length>(key==="instructions"?6000:500))throw Error("Недопустимое значение");c[key]=v.trim();}
     }
     if(c.endpoint)baseUrl(c.endpoint);
     save(c);return json(res,200,publicConfig(c));
+   }
+   if(pathname==="/api/diagnostics"&&req.method==="GET"){
+    const c=load(),db=memory.stats(c.embeddingModel);
+    return json(res,200,{server:"ok",sqlite:"ok",memory:db,cloudConfigured:Boolean(c.endpoint&&auth(c)&&c.model),streamEnabled:c.streamEnabled,toolsEnabled:c.toolsEnabled});
+   }
+   if(pathname==="/api/memory/stats"&&req.method==="GET"){const c=load();return json(res,200,memory.stats(c.embeddingModel));}
+   if(pathname==="/api/data/export"&&req.method==="GET"){const c=load();return json(res,200,{kind:"ayureika-server-backup",version:1,settings:publicConfig(c),facts:memory.list().map(x=>x.content),note:"API-ключ не включён. Экспортируются последние 100 записей памяти."});}
+   if(pathname==="/api/data/import"&&req.method==="POST"){
+    const input=await body(req);if(input.confirm!==true||input.kind!=="ayureika-server-backup"||input.version!==1)return json(res,400,{error:"Неверная резервная копия или нет подтверждения"});
+    if(!Array.isArray(input.facts)||input.facts.length>100)return json(res,400,{error:"Неверный список памяти"});
+    const safe=input.settings;
+    const patch={};
+    if(safe&&typeof safe==="object"&&!Array.isArray(safe)){
+     for(const key of ["endpoint","model","fallbackModel","embeddingModel","instructions"]){if(Object.hasOwn(safe,key)){if(typeof safe[key]!=="string"||safe[key].length>(key==="instructions"?6000:500))throw Error("Неверные настройки: "+key);patch[key]=safe[key];}}
+     for(const key of ["memoryEnabled","toolsEnabled","streamEnabled"]){if(Object.hasOwn(safe,key)){if(typeof safe[key]!=="boolean")throw Error("Неверные настройки: "+key);patch[key]=safe[key];}}
+     if(Object.hasOwn(safe,"historyLimit")){if(!Number.isInteger(safe.historyLimit)||safe.historyLimit<0||safe.historyLimit>20)throw Error("Неверный лимит истории");patch.historyLimit=safe.historyLimit;}
+     if(Object.hasOwn(safe,"allowedTools")){if(!Array.isArray(safe.allowedTools)||safe.allowedTools.some(x=>!["calculator","clock","memory_search"].includes(x))||new Set(safe.allowedTools).size!==safe.allowedTools.length)throw Error("Неверные разрешения");patch.allowedTools=safe.allowedTools;}
+     if(Object.hasOwn(safe,"quickCommands")){if(!Array.isArray(safe.quickCommands)||safe.quickCommands.length>30||safe.quickCommands.some(x=>!x||typeof x.name!=="string"||typeof x.text!=="string"||x.name.length>32||x.text.length>2000))throw Error("Неверные команды");patch.quickCommands=safe.quickCommands;}
+     if(patch.endpoint)baseUrl(patch.endpoint);
+    }
+    const count=memory.importFacts(input.facts);if(Object.keys(patch).length)save({...load(),...patch});return json(res,200,{imported:count,settingsRestored:Object.keys(patch).length>0});
    }
    if(pathname==="/api/memory"&&req.method==="GET")return json(res,200,{items:memory.list()});
    if(pathname==="/api/memory"&&req.method==="POST"){const c=load();if(!c.memoryEnabled)return json(res,403,{error:"Память отключена"});const input=await body(req);return json(res,200,memory.remember(input.content));}
@@ -73,7 +98,7 @@ async function handler(req,res){
    if(pathname==="/api/memory/search"&&req.method==="POST"){const c=load();if(!c.memoryEnabled)return json(res,403,{error:"Память отключена"});const input=await body(req);return json(res,200,{items:memory.search(input.query)});}
    if(pathname==="/api/memory/delete"&&req.method==="POST"){const input=await body(req);if(input.confirm!==true)return json(res,403,{error:"Требуется подтверждение"});return json(res,200,{deleted:memory.forget(input.id)});}
    if(pathname==="/api/tools"&&req.method==="GET")return json(res,200,{available:["calculator","clock","memory_search"],audit:memory.logs()});
-   if(pathname==="/api/tools/run"&&req.method==="POST"){const c=load();if(!c.toolsEnabled)return json(res,403,{error:"Инструменты отключены"});const input=await body(req);return json(res,200,memory.execute(input.name,input.input,input.confirm===true));}
+   if(pathname==="/api/tools/run"&&req.method==="POST"){const c=load();const input=await body(req);if(!toolAllowed(c,input.name))return json(res,403,{error:"Инструмент запрещён настройками"});return json(res,200,memory.execute(input.name,input.input,input.confirm===true));}
    if(pathname==="/api/tools/approve"&&req.method==="POST"){
     const c=load(),input=await body(req);cleanupPending();
     if(typeof input.id!=="string")return json(res,400,{error:"Неверный запрос"});
@@ -81,7 +106,7 @@ async function handler(req,res){
     if(!pending)return json(res,404,{error:"Запрос инструмента истёк"});
     pendingTools.delete(input.id);
     if(input.approve!==true)return json(res,200,{reply:"Выполнение инструмента отменено."});
-    if(!c.toolsEnabled)return json(res,403,{error:"Инструменты отключены"});
+    if(!toolAllowed(c,pending.name))return json(res,403,{error:"Инструмент запрещён настройками"});
     const result=memory.execute(pending.name,pending.input,true);
     const messages=[...pending.messages,{role:"tool",tool_call_id:pending.callId,content:result.output}];
     try{
@@ -110,10 +135,10 @@ async function handler(req,res){
     const c=load(),input=await body(req);
     if(typeof input.message!=="string"||!input.message.trim()||input.message.length>30000)return json(res,400,{error:"Недопустимое сообщение"});
     if(!auth(c)||!c.model)return json(res,503,{error:"Укажите API-ключ и модель Cloud.ru"});
-    if(c.toolsEnabled)return json(res,409,{error:"Потоковый режим недоступен при включённых инструментах; используйте обычный чат"});
+    if(c.toolsEnabled||!c.streamEnabled)return json(res,409,{error:"Потоковый режим отключён настройками"});
     if(c.memoryEnabled&&memory.extractExplicit(input.message))return json(res,409,{error:"Команду запоминания отправляйте обычным запросом"});
     const messages=[];if(c.instructions)messages.push({role:"system",content:c.instructions});
-    if(c.memoryEnabled&&Array.isArray(input.history))for(const m of input.history.slice(-20)){if(["user","assistant"].includes(m.role)&&typeof m.content==="string")messages.push({role:m.role,content:m.content.slice(0,30000)});}
+    if(c.memoryEnabled&&c.historyLimit>0&&Array.isArray(input.history))for(const m of input.history.slice(-c.historyLimit)){if(["user","assistant"].includes(m.role)&&typeof m.content==="string")messages.push({role:m.role,content:m.content.slice(0,30000)});}
     if(c.memoryEnabled){const rows=await retrieve(c,input.message.slice(0,500));if(rows.length)messages.unshift({role:"system",content:"Записи памяти пользователя:\n"+rows.map(x=>"- "+x.content).join("\n")});}
     if(messages.at(-1)?.role!=="user"||messages.at(-1)?.content!==input.message)messages.push({role:"user",content:input.message});
     const model=typeof input.model==="string"&&input.model?input.model:c.model;
@@ -140,7 +165,7 @@ async function handler(req,res){
     if(c.memoryEnabled){const remembered=await retrieve(c,input.message.slice(0,500));if(remembered.length)messages.unshift({role:"system",content:"Подтверждённые записи памяти пользователя:\\n"+remembered.map(x=>"- "+x.content).join("\\n")});}
     if(messages.at(-1)?.role!=="user"||messages.at(-1)?.content!==input.message)messages.push({role:"user",content:input.message});
     let upstream;let chosen=typeof input.model==="string"&&input.model?input.model:c.model;
-    const payload=model=>({model,messages,stream:false,...(c.toolsEnabled?{tools:toolDefs,tool_choice:"auto"}:{})});
+    const payload=model=>({model,messages,stream:false,...(c.toolsEnabled&&allowedDefinitions(c).length?{tools:allowedDefinitions(c),tool_choice:"auto"}:{})});
     upstream=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify(payload(chosen))});
     if(!upstream.ok&&[429,500,502,503,504].includes(upstream.status)&&c.fallbackModel&&chosen!==c.fallbackModel){chosen=c.fallbackModel;upstream=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify(payload(chosen))});}
     if(!upstream.ok)return json(res,502,{error:providerError(upstream.status)});
