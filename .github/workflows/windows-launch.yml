@@ -29,7 +29,7 @@ jobs:
         run: |
           $target = Join-Path $env:RUNNER_TEMP 'Ayureika тест & (x)'
           New-Item -ItemType Directory -Force -Path $target | Out-Null
-          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE '*') -Destination $target -Recurse -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE '*') -Destination $target -Recurse -Force
           $script = Join-Path $target 'Ayureika.bat'
           if (-not (Test-Path -LiteralPath $script)) { throw 'BAT not copied' }
           $env:AYUREIKA_CI_CHECK = '1'
