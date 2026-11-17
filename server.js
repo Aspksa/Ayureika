@@ -124,7 +124,7 @@ async function handler(req,res){
     res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8","Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no","X-Content-Type-Options":"nosniff"});
     const reader=upstream.body.getReader(),decoder=new TextDecoder();let buffer="";
     const send=(obj)=>{if(!res.destroyed)res.write("data: "+JSON.stringify(obj)+"\n\n");};
-    req.on("close",()=>{void reader.cancel().catch(()=>{});});
+    res.on("close",()=>{if(!res.writableEnded)void reader.cancel().catch(()=>{});});
     try{while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const frames=buffer.split(/\r?\n\r?\n/);buffer=frames.pop()||"";
      for(const frame of frames){for(const line of frame.split(/\r?\n/)){if(!line.startsWith("data:"))continue;const raw=line.slice(5).trim();if(raw==="[DONE]")continue;try{const obj=JSON.parse(raw);const delta=obj.choices?.[0]?.delta?.content;if(typeof delta==="string"&&delta)send({delta});}catch{}}}
     }send({done:true});}catch(e){send({error:"Поток ответа прерван: "+(e instanceof Error?e.message:"ошибка")});}finally{res.end();}
