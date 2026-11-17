@@ -31,6 +31,12 @@ async function run(){
  await evaluate("document.querySelector('.ay-head button[title=\"Настройки Ayureika\"]').click()");
  await waitFor(()=>evaluate("document.querySelector('.ay-settings-page').hidden===false"));
  assert.ok(await evaluate("document.querySelectorAll('.ay-settings-link').length>=5"));
+ assert.equal(await evaluate("document.querySelector('.ay-settings-header h1').textContent"),"Центр управления");
+ assert.equal(await evaluate("document.querySelector('.ay-settings-context strong').textContent"),"Подключение");
+ await evaluate("document.querySelector('.ay-settings-link[data-section=\\\"memory\\\"]').click()");
+ assert.equal(await evaluate("document.querySelector('.ay-settings-context strong').textContent"),"Память");
+ assert.ok(await evaluate("getComputedStyle(document.querySelector('.ay-settings-layout')).display==='grid'"));
+
  assert.equal(await evaluate("document.querySelectorAll('.ay-settings-card:not([hidden])').length"),1);
  assert.equal(await evaluate("document.querySelectorAll('.ay-settings-card:not([hidden]) .ay-settings-card-body').length"),1);
  await evaluate("document.querySelector('.ay-settings-link[data-section=\\\"chat\\\"]').click()");
@@ -64,6 +70,15 @@ async function run(){
  await evaluate("document.querySelector('.ay-settings-nav input').value='память';document.querySelector('.ay-settings-nav input').dispatchEvent(new Event('input',{bubbles:true}))");
  assert.ok(await evaluate("document.querySelectorAll('.ay-settings-link:not([hidden])').length>=1"));
 
+ for(const width of [1440,1024,768,600,390,320]){
+  await cmd("Emulation.setDeviceMetricsOverride",{width,height:844,deviceScaleFactor:1,mobile:width<=760});
+  await evaluate("document.querySelector('.ay-settings-nav input').value='';document.querySelector('.ay-settings-nav input').dispatchEvent(new Event('input',{bubbles:true}))");
+  for(const section of ["conn","memory","avatar","chat","look"]){
+   await evaluate("document.querySelector('.ay-settings-link[data-section=\\\""+section+"\\\"]').click()");
+   const geometry=await evaluate("(()=>{const v=innerWidth;const els=['.ay-settings-page','.ay-settings-layout','.ay-settings-nav','.ay-settings-content','.ay-settings-card:not([hidden])'];return els.map(sel=>{const r=document.querySelector(sel).getBoundingClientRect();return {sel,left:r.left,right:r.right,width:r.width,viewport:v};});})()");
+   for(const g of geometry){assert.ok(g.left>=-2 && g.right<=width+2,"Layout overflow "+width+" "+section+" "+g.sel+" "+JSON.stringify(g));}
+  }
+ }
  await cmd("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
  assert.ok(await evaluate("document.querySelector('.ay-settings-layout').getBoundingClientRect().width<=390"));
  assert.ok(await evaluate("getComputedStyle(document.querySelector('.ay-settings-layout')).gridTemplateColumns.split(' ').length===1"));
