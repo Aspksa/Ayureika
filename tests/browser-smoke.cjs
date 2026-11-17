@@ -31,6 +31,12 @@ async function run(){
  await evaluate("document.querySelector('.ay-head button[title=\"Настройки Ayureika\"]').click()");
  await waitFor(()=>evaluate("document.querySelector('.ay-settings-page').hidden===false"));
  assert.ok(await evaluate("document.querySelectorAll('.ay-settings-link').length>=5"));
+ assert.equal(await evaluate("document.querySelector('.ay-settings-header h1').textContent"),"Центр управления");
+ assert.equal(await evaluate("document.querySelector('.ay-settings-context strong').textContent"),"Подключение");
+ await evaluate("document.querySelector('.ay-settings-link[data-section=\\\"memory\\\"]').click()");
+ assert.equal(await evaluate("document.querySelector('.ay-settings-context strong').textContent"),"Память");
+ assert.ok(await evaluate("getComputedStyle(document.querySelector('.ay-settings-layout')).display==='grid'"));
+
  assert.equal(await evaluate("document.querySelectorAll('.ay-settings-card:not([hidden])').length"),1);
  assert.equal(await evaluate("document.querySelectorAll('.ay-settings-card:not([hidden]) .ay-settings-card-body').length"),1);
  await evaluate("document.querySelector('.ay-settings-link[data-section=\\\"chat\\\"]').click()");
