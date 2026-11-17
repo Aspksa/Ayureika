@@ -6,13 +6,14 @@ const root=path.resolve(__dirname,"frontend");
 const dataDir=path.join(__dirname,"data");
 const configPath=path.join(dataDir,"cloudru-settings.json");
 const types={".png":"image/png",".webp":"image/webp",".jpg":"image/jpeg",".html":"text/html; charset=utf-8",".css":"text/css; charset=utf-8",".js":"text/javascript; charset=utf-8"};
-const defaults={endpoint:"",model:"",fallbackModel:"",apiKey:"",instructions:"",memoryEnabled:true,toolsEnabled:false,quickCommands:[],embeddingModel:""};
+const defaults={endpoint:"https://foundation-models.api.cloud.ru/v1",model:"",fallbackModel:"",apiKey:"",instructions:"",memoryEnabled:true,toolsEnabled:false,quickCommands:[],embeddingModel:""};
 function load(){try{return {...defaults,...JSON.parse(fs.readFileSync(configPath,"utf8"))};}catch{return {...defaults};}}
 function save(config){fs.mkdirSync(dataDir,{recursive:true});const tmp=configPath+".tmp";fs.writeFileSync(tmp,JSON.stringify(config,null,2),{mode:0o600});fs.renameSync(tmp,configPath);}
 function publicConfig(c){const {apiKey,...safe}=c;return {...safe,keyConfigured:Boolean(apiKey||process.env.CLOUD_RU_API_KEY)};}
 function json(res,code,body){res.writeHead(code,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"});res.end(JSON.stringify(body));}
 function body(req){return new Promise((resolve,reject)=>{let s="";req.on("data",c=>{s+=c;if(s.length>2e6){reject(new Error("Слишком большой запрос"));req.destroy();}});req.on("end",()=>{try{resolve(JSON.parse(s||"{}"));}catch{reject(new Error("Некорректный JSON"));}});req.on("error",reject);});}
 function baseUrl(endpoint){const u=new URL(endpoint);if(u.protocol!=="https:")throw new Error("Для API требуется HTTPS");if(u.username||u.password||u.hash)throw new Error("Некорректный URL API");return u.toString().replace(/\/$/,"");}
+function providerError(status){const names={400:"Неверный запрос к модели",401:"Неверный или просроченный API-ключ",402:"Недостаточно средств или доступ к оплате ограничен",403:"Доступ к модели запрещён",404:"Модель или метод API не найден",408:"Истекло время ожидания",422:"Неверные параметры модели",429:"Превышен лимит запросов",500:"Внутренняя ошибка Cloud.ru",502:"Ошибка шлюза Cloud.ru",503:"Сервис Cloud.ru временно недоступен",504:"Cloud.ru не ответил вовремя"};return (names[status]||"Ошибка Cloud.ru")+" (HTTP "+status+")";}
 function auth(c){return c.apiKey||process.env.CLOUD_RU_API_KEY||"";}
 async function remote(c,route,options={}){const url=baseUrl(c.endpoint)+route;const r=await fetch(url,{...options,headers:{"Authorization":"Bearer "+auth(c),"Content-Type":"application/json",...(options.headers||{})},signal:AbortSignal.timeout(90000)});return r;}
 const pendingTools=new Map();
@@ -92,12 +93,43 @@ async function handler(req,res){
      return json(res,200,{reply,model:pending.model,toolResult:result});
     }catch(e){return json(res,502,{error:"Инструмент выполнен, но продолжение ответа не удалось: "+(e instanceof Error?e.message:"ошибка"),toolResult:result});}
    }
+   if(pathname==="/api/cloud/check"&&req.method==="GET"){
+    const c=load();if(!auth(c))return json(res,200,{ok:false,error:"Укажите API-ключ Cloud.ru",code:"NO_KEY"});
+    try{const r=await remote(c,"/models");if(!r.ok)return json(res,200,{ok:false,error:providerError(r.status),status:r.status});
+     const d=await r.json();if(!Array.isArray(d.data))return json(res,200,{ok:false,error:"Неожиданный формат списка моделей"});
+     return json(res,200,{ok:true,models:d.data.length,selectedModel:c.model,modelAvailable:!c.model||d.data.some(x=>x.id===c.model)});
+    }catch(e){return json(res,200,{ok:false,error:e instanceof Error?e.name==="TimeoutError"?"Cloud.ru не ответил за 90 секунд":"Сетевая ошибка: "+e.message:"Ошибка сети"});}
+   }
    if(pathname==="/api/cloud/models"&&req.method==="GET"){
     const c=load();let models=(process.env.CLOUD_RU_MODELS||"").split(",").map(s=>s.trim()).filter(Boolean);
-    if(c.endpoint&&auth(c)){try{const upstream=await remote(c,"/models");if(upstream.ok){const d=await upstream.json();if(Array.isArray(d.data))models=[...new Set([...models,...d.data.map(x=>x.id).filter(x=>typeof x==="string")])];}}catch{}}
-    return json(res,200,{models:[...new Set([c.model,c.fallbackModel,...models].filter(Boolean))],configured:Boolean(c.endpoint&&auth(c))});
+    let warning="";if(c.endpoint&&auth(c)){try{const upstream=await remote(c,"/models");if(upstream.ok){const d=await upstream.json();if(Array.isArray(d.data))models=[...new Set([...models,...d.data.map(x=>x.id).filter(x=>typeof x==="string")])];}else warning=providerError(upstream.status);}catch(e){warning="Не удалось получить модели: "+(e instanceof Error?e.message:"ошибка сети");}}
+    return json(res,200,{models:[...new Set([c.model,c.fallbackModel,...models].filter(Boolean))],configured:Boolean(c.endpoint&&auth(c)),warning});
    }
    if(pathname==="/api/health"&&req.method==="GET"){const c=load();return json(res,200,{server:true,endpointConfigured:Boolean(c.endpoint),keyConfigured:Boolean(auth(c)),modelConfigured:Boolean(c.model)});}
+   if(pathname==="/api/chat/stream"&&req.method==="POST"){
+    const c=load(),input=await body(req);
+    if(typeof input.message!=="string"||!input.message.trim()||input.message.length>30000)return json(res,400,{error:"Недопустимое сообщение"});
+    if(!auth(c)||!c.model)return json(res,503,{error:"Укажите API-ключ и модель Cloud.ru"});
+    if(c.toolsEnabled)return json(res,409,{error:"Потоковый режим недоступен при включённых инструментах; используйте обычный чат"});
+    if(c.memoryEnabled&&memory.extractExplicit(input.message))return json(res,409,{error:"Команду запоминания отправляйте обычным запросом"});
+    const messages=[];if(c.instructions)messages.push({role:"system",content:c.instructions});
+    if(c.memoryEnabled&&Array.isArray(input.history))for(const m of input.history.slice(-20)){if(["user","assistant"].includes(m.role)&&typeof m.content==="string")messages.push({role:m.role,content:m.content.slice(0,30000)});}
+    if(c.memoryEnabled){const rows=await retrieve(c,input.message.slice(0,500));if(rows.length)messages.unshift({role:"system",content:"Записи памяти пользователя:\n"+rows.map(x=>"- "+x.content).join("\n")});}
+    if(messages.at(-1)?.role!=="user"||messages.at(-1)?.content!==input.message)messages.push({role:"user",content:input.message});
+    const model=typeof input.model==="string"&&input.model?input.model:c.model;
+    let upstream=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify({model,messages,stream:true})});
+    if(!upstream.ok&&[429,500,502,503,504].includes(upstream.status)&&c.fallbackModel&&model!==c.fallbackModel)upstream=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify({model:c.fallbackModel,messages,stream:true})});
+    if(!upstream.ok)return json(res,502,{error:providerError(upstream.status)});
+    if(!upstream.body)return json(res,502,{error:"Cloud.ru не предоставил поток ответа"});
+    res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8","Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no","X-Content-Type-Options":"nosniff"});
+    const reader=upstream.body.getReader(),decoder=new TextDecoder();let buffer="";
+    const send=(obj)=>{if(!res.destroyed)res.write("data: "+JSON.stringify(obj)+"\n\n");};
+    res.on("close",()=>{if(!res.writableEnded)void reader.cancel().catch(()=>{});});
+    try{while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const frames=buffer.split(/\r?\n\r?\n/);buffer=frames.pop()||"";
+     for(const frame of frames){for(const line of frame.split(/\r?\n/)){if(!line.startsWith("data:"))continue;const raw=line.slice(5).trim();if(raw==="[DONE]")continue;try{const obj=JSON.parse(raw);const delta=obj.choices?.[0]?.delta?.content;if(typeof delta==="string"&&delta)send({delta});}catch{}}}
+    }send({done:true});}catch(e){send({error:"Поток ответа прерван: "+(e instanceof Error?e.message:"ошибка")});}finally{res.end();}
+    return;
+   }
    if(pathname==="/api/chat"&&req.method==="POST"){
     const c=load();const input=await body(req);if(typeof input.message!=="string"||input.message.length>30000)return json(res,400,{error:"Недопустимое сообщение"});
     const explicitFact=c.memoryEnabled?memory.extractExplicit(input.message):null;
@@ -111,7 +143,7 @@ async function handler(req,res){
     const payload=model=>({model,messages,stream:false,...(c.toolsEnabled?{tools:toolDefs,tool_choice:"auto"}:{})});
     upstream=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify(payload(chosen))});
     if(!upstream.ok&&[429,500,502,503,504].includes(upstream.status)&&c.fallbackModel&&chosen!==c.fallbackModel){chosen=c.fallbackModel;upstream=await remote(c,"/chat/completions",{method:"POST",body:JSON.stringify(payload(chosen))});}
-    if(!upstream.ok)return json(res,502,{error:"Провайдер ИИ вернул ошибку "+upstream.status});
+    if(!upstream.ok)return json(res,502,{error:providerError(upstream.status)});
     const response=await upstream.json();
     const staged=stageTool(c,chosen,messages,response,0);
     if(staged)return json(res,200,staged);
