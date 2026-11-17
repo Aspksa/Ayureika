@@ -58,6 +58,29 @@ class StartupTests(unittest.TestCase):
             proc.wait(timeout=5)
             launcher.PROCESSES.remove(proc)
 
+    def test_missing_dependencies(self):
+        from unittest.mock import patch
+        with patch.object(launcher, "find_node", return_value=(None, None)), \
+             patch.object(launcher.shutil, "which", return_value=None):
+            with self.assertRaises(RuntimeError):
+                launcher.require_node()
+
+    def test_missing_typescript(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertFalse((Path(directory) / "node_modules" / "typescript" / "bin" / "tsc").exists())
+
+    def test_stop_all(self):
+        proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        launcher.PROCESSES.append(proc)
+        try:
+            launcher.stop_all()
+            self.assertIsNotNone(proc.poll())
+        finally:
+            launcher.PROCESSES.remove(proc)
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+
     def test_build(self):
         node = launcher.find_node()[0]
         tsc = ROOT / "node_modules" / "typescript" / "bin" / "tsc"
