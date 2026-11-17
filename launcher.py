@@ -14,6 +14,11 @@ import urllib.request
 import webbrowser
 import json
 
+# Preserve Russian diagnostics when Windows CI uses a non-Unicode console.
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(errors="backslashreplace")
+
 ROOT = Path(__file__).resolve().parent
 LOG_DIR = ROOT / "logs"
 LOG_DIR.mkdir(exist_ok=True)
