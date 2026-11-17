@@ -109,7 +109,7 @@ form.onsubmit = async e => {
       const reply:Message={role:"assistant",content:""}; target.messages.push(reply);
       const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="";
       while(true) { const {done,value}=await reader.read(); if(done)break; buffer+=decoder.decode(value,{stream:true});
-        if(type.includes("text/event-stream")) { const parts=buffer.split("\n\n");buffer=parts.pop()||"";for(const part of parts){for(const line of part.split("\n"))if(line.startsWith("data:")){const raw=line.slice(5).trim();if(raw==="[DONE]")continue;try{const obj=JSON.parse(raw) as {delta?:string;content?:string;error?:string};if(obj.error)throw Error(obj.error);reply.content+=obj.delta??obj.content??"";}catch{reply.content+=raw;}}} }
+        if(type.includes("text/event-stream")) { const parts=buffer.split("\n\n");buffer=parts.pop()||"";for(const part of parts){for(const line of part.split("\n"))if(line.startsWith("data:")){const raw=line.slice(5).trim();if(raw==="[DONE]")continue;try{const obj=JSON.parse(raw) as {delta?:string;content?:string;error?:string};if(obj.error){status.textContent=obj.error;continue;}reply.content+=obj.delta??obj.content??"";}catch{reply.content+=raw;}}} }
         else if(type.includes("application/x-ndjson")) { const parts=buffer.split("\n");buffer=parts.pop()||"";for(const line of parts){try{const obj=JSON.parse(line) as {delta?:string};reply.content+=obj.delta||"";}catch{}} }
         else { reply.content+=buffer;buffer=""; }
         if(current===target.id)paint();
@@ -125,7 +125,7 @@ form.onsubmit = async e => {
     }
     if(data.confirmation)throw Error("Превышен лимит инструментов");
     if(typeof data.reply!=="string")throw new Error(data.error||"Нет ответа");target.messages.push({role:"assistant",content:data.reply}); }
-    persist();if(current===target.id)paint();status.textContent="";
+    persist();if(current===target.id)paint();if(!status.textContent.startsWith("Поток ответа прерван"))status.textContent="";
   } catch(error) { status.textContent=error instanceof Error && error.name==="AbortError"?"Запрос остановлен":error instanceof Error?error.message:"Ошибка подключения";persist(); }
   finally {active=null;avatar.classList.remove("busy");busyBadge.hidden=true;send.disabled=false;stop.hidden=true;input.focus();}
 };
