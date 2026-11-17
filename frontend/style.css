@@ -252,3 +252,43 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 }
 @media(max-width:420px){.ay-settings-header h1{font-size:19px}.ay-settings-context>strong{font-size:22px}.ay-settings-card-title strong{font-size:15px}.ay-settings-theme-preview{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* Alignment and overflow hardening — desktop, tablet, mobile */
+.ay-settings-page[hidden],.ay-chat[hidden]{display:none!important}
+.ay-settings-layout,.ay-settings-nav,.ay-settings-content,.ay-settings-card,.ay-settings-card-body,.ay-chat,.ay-chat-main,.ay-head,.ay-form{min-width:0}
+.ay-settings-card-body>*,.ay-settings-card-body label,.ay-settings-card-body pre{max-width:100%;min-width:0}
+.ay-settings-card-body pre{overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.ay-settings-nav{min-height:0}
+.ay-settings-content{overscroll-behavior:contain}
+.ay-settings-link{box-sizing:border-box}
+.ay-settings-card-head{box-sizing:border-box}
+.ay-head{min-width:0}
+.ay-head select,.ay-head input{flex-shrink:1}
+.ay-form textarea{min-width:0}
+@media(min-width:761px) and (max-width:1100px){
+ .ay-settings-layout{grid-template-columns:90px minmax(0,1fr);gap:14px;padding:14px}
+ .ay-settings-nav{padding:10px 6px}
+ .ay-settings-link{min-height:58px}
+ .ay-settings-card-body{padding-left:18px;padding-right:18px}
+}
+@media(max-width:760px){
+ .ay-settings-layout{overflow:hidden}
+ .ay-settings-nav{min-width:0;overflow:hidden}
+ .ay-settings-nav nav{width:100%;min-width:0;scrollbar-width:thin}
+ .ay-settings-content{min-width:0;overflow-x:hidden}
+ .ay-settings-card-body{overflow-wrap:anywhere}
+ .ay-settings-card-body input,.ay-settings-card-body select,.ay-settings-card-body textarea{width:100%;box-sizing:border-box}
+ .ay-settings-header{gap:10px}
+ .ay-settings-header>div{min-width:0}
+ .ay-settings-header h1{overflow-wrap:anywhere}
+ .ay-head{cursor:default}
+}
+@media(max-width:480px){
+ .ay-settings-card-head{padding:12px}
+ .ay-settings-card-title{min-width:0}
+ .ay-settings-card-title small{overflow-wrap:anywhere}
+ .ay-settings-card-body{padding:4px 12px 16px}
+ .ay-settings-header{padding:12px}
+ .ay-settings-context{padding-left:4px;padding-right:4px}
+ .ay-settings-exit{width:40px;height:40px;flex:none}
+}
