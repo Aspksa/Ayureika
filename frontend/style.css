@@ -1,4 +1,572 @@
-html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden;font-family:Arial,sans-serif;color:#eee}*{box-sizing:border-box}button,textarea{font:inherit}button{cursor:pointer}.ay-avatar{position:fixed;width:var(--avatar-size,64px);height:var(--avatar-size,64px);border:2px solid #b9974c;border-radius:50%;background:#18140d;color:#e5c77a;touch-action:none;z-index:20;overflow:hidden;padding:0}.ay-avatar img,.ay-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}.ay-fallback{display:grid;place-items:center;font-size:26px}.ay-chat{position:fixed;right:18px;bottom:18px;width:min(760px,calc(100vw - 36px));height:min(650px,calc(100dvh - 36px));z-index:30;display:flex;flex-direction:column;background:#0d0d0d;border:1px solid #403522;border-radius:16px;box-shadow:0 15px 60px #000a;overflow:hidden}.ay-chat[hidden]{display:none}.ay-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #29251f}.ay-head strong{flex:1;color:#e2c47b}.ay-head button,.ay-form button{background:#29251b;color:#e7d5aa;border:1px solid #58482a;border-radius:8px;padding:8px 12px}.ay-thread{flex:1;overflow:auto;display:flex;flex-direction:column;gap:14px;padding:20px}.ay-msg{white-space:pre-wrap;overflow-wrap:anywhere;max-width:88%;line-height:1.5}.ay-msg.user{align-self:flex-end;background:#27221b;border-radius:16px;padding:12px 16px}.ay-msg.assistant{align-self:flex-start;padding:12px 4px}.ay-form{display:flex;align-items:end;gap:8px;padding:12px 16px}.ay-form textarea{flex:1;min-width:0;resize:vertical;max-height:170px;background:#1b1b1b;border:1px solid #413b30;color:#fff;border-radius:12px;padding:12px}.ay-status{margin:0;padding:0 16px 12px;color:#c4a66c;font-size:13px;min-height:14px}@media(max-width:600px){.ay-chat{inset:0;width:100%;height:100dvh;border-radius:0}.ay-head{padding:12px}.ay-form{padding:10px}}
-.ay-avatar-settings{position:fixed;z-index:40;right:16px;top:16px;width:min(320px,calc(100vw - 32px));background:#14120e;border:1px solid #8b733e;border-radius:14px;padding:16px;box-shadow:0 12px 36px #000b;color:#eee}.ay-avatar-settings[hidden]{display:none}.ay-avatar-settings header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;color:#e2c47b}.ay-avatar-settings header button{background:transparent;border:0;color:inherit;font-size:24px}.ay-avatar-settings label{display:grid;grid-template-columns:1fr auto;gap:8px;margin:12px 0}.ay-avatar-settings input{grid-column:1/-1;width:100%;accent-color:#c9a85d}.ay-avatar:focus-visible{outline:3px solid #e2c47b;outline-offset:4px}@media(max-width:600px){.ay-avatar-settings{top:env(safe-area-inset-top,12px);right:12px}.ay-chat{padding-bottom:env(safe-area-inset-bottom,0px)}}
+/* ============================================================
+   Ayureika — тёмная тема с янтарными акцентами, glassmorphism
+   и плавными анимациями.
+   ============================================================ */
 
-.ay-avatar-settings .ay-avatar-upload{display:block;margin:18px 0 8px;padding:12px;border:1px solid #a68b51;border-radius:9px;background:#302718;color:#f2d78e;text-align:center;cursor:pointer}.ay-avatar-settings .ay-avatar-upload input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}.ay-avatar-settings .ay-avatar-upload:focus-within{outline:2px solid #f2d78e;outline-offset:3px}.ay-avatar-upload-status{font-size:12px;color:#d3ba82;line-height:1.4;min-height:1em}
+:root {
+  --bg: #07070b;
+  --surface: rgba(21, 20, 30, .82);
+  --surface-solid: #15141e;
+  --surface-raised: #1d1b28;
+  --border: rgba(255, 255, 255, .09);
+  --border-strong: rgba(255, 255, 255, .16);
+  --accent: #f2b705;
+  --accent-soft: #ffd369;
+  --accent-dim: rgba(242, 183, 5, .14);
+  --text: #eceaf4;
+  --text-muted: #9b97ad;
+  --danger: #ff8471;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+  --shadow: 0 24px 70px rgba(0, 0, 0, .55), 0 2px 10px rgba(0, 0, 0, .4);
+  --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font);
+  color: var(--text);
+  background:
+    radial-gradient(1100px 620px at 88% -12%, rgba(242, 183, 5, .09), transparent 62%),
+    radial-gradient(900px 640px at -12% 112%, rgba(96, 74, 255, .11), transparent 60%),
+    var(--bg);
+}
+
+button, textarea, input { font: inherit; }
+button { cursor: pointer; border: 0; background: none; color: inherit; }
+::selection { background: var(--accent); color: #100c00; }
+
+:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* ---------- Аватар ---------- */
+
+.ay-avatar {
+  position: fixed;
+  width: var(--avatar-size, 64px);
+  height: var(--avatar-size, 64px);
+  padding: 0;
+  touch-action: none;
+  z-index: 20;
+  overflow: hidden;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--surface-solid), var(--surface-solid)) padding-box,
+    linear-gradient(140deg, var(--accent), #a45cff 55%, var(--accent-soft)) border-box;
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, .5),
+    0 0 0 1px rgba(0, 0, 0, .4),
+    0 0 22px rgba(242, 183, 5, .25);
+  transition: transform .25s cubic-bezier(.2, .9, .3, 1.4), box-shadow .25s ease;
+  animation: ay-avatar-in .5s cubic-bezier(.2, .9, .3, 1.3) both;
+}
+
+@keyframes ay-avatar-in {
+  from { opacity: 0; transform: scale(.4); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.ay-avatar:hover {
+  transform: scale(1.07);
+  box-shadow:
+    0 14px 38px rgba(0, 0, 0, .55),
+    0 0 30px rgba(242, 183, 5, .45);
+}
+
+.ay-avatar:active { transform: scale(.96); }
+
+.ay-avatar img,
+.ay-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.ay-fallback {
+  display: grid;
+  place-items: center;
+  font-size: calc(var(--avatar-size, 64px) * .42);
+  font-weight: 700;
+  letter-spacing: .02em;
+  background: radial-gradient(circle at 30% 25%, #2c2740, #17141f 70%);
+  color: var(--accent-soft);
+  text-shadow: 0 0 14px rgba(242, 183, 5, .45);
+}
+
+/* ---------- Панель чата ---------- */
+
+.ay-chat {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  width: min(760px, calc(100vw - 36px));
+  height: min(650px, calc(100dvh - 36px));
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.ay-chat[hidden] { display: none; }
+
+.ay-chat:not([hidden]) {
+  animation: ay-panel-in .3s cubic-bezier(.2, .9, .3, 1.15) both;
+}
+
+@keyframes ay-panel-in {
+  from { opacity: 0; transform: translateY(18px) scale(.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+.ay-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .04), transparent);
+}
+
+.ay-brand {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ay-head strong {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  background: linear-gradient(92deg, var(--accent-soft), var(--accent) 45%, #c78bff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.ay-tagline {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ay-head button {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, .05);
+  color: var(--text);
+  font-size: 13px;
+  transition: background .2s ease, border-color .2s ease, transform .15s ease;
+}
+
+.ay-head button:hover {
+  background: var(--accent-dim);
+  border-color: rgba(242, 183, 5, .5);
+}
+
+.ay-head button:active { transform: scale(.95); }
+
+.ay-close {
+  width: 34px;
+  height: 34px;
+  padding: 0 !important;
+  display: grid;
+  place-items: center;
+  font-size: 19px;
+  line-height: 1;
+  border-radius: 50% !important;
+}
+
+/* ---------- Лента сообщений ---------- */
+
+.ay-thread {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .18) transparent;
+}
+
+.ay-thread::-webkit-scrollbar { width: 8px; }
+.ay-thread::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .15); border-radius: 8px; }
+.ay-thread::-webkit-scrollbar-thumb:hover { background: rgba(242, 183, 5, .45); }
+
+.ay-empty {
+  margin: auto;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  animation: ay-fade-in .5s ease both;
+}
+
+.ay-empty::before {
+  content: "✦";
+  font-size: 34px;
+  color: var(--accent);
+  text-shadow: 0 0 18px rgba(242, 183, 5, .55);
+}
+
+@keyframes ay-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.ay-msg {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 84%;
+  line-height: 1.55;
+  font-size: 15px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  animation: ay-msg-in .28s cubic-bezier(.2, .9, .3, 1.1) both;
+}
+
+@keyframes ay-msg-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.ay-msg.user {
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+  background: linear-gradient(135deg, rgba(242, 183, 5, .22), rgba(242, 183, 5, .1));
+  border: 1px solid rgba(242, 183, 5, .35);
+  color: #ffe9a8;
+}
+
+.ay-msg.assistant {
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+/* Индикатор «печатает…» */
+
+.ay-typing {
+  align-self: flex-start;
+  display: inline-flex;
+  gap: 5px;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  border-bottom-left-radius: 4px;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid var(--border);
+}
+
+.ay-typing i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  animation: ay-bounce 1.2s ease-in-out infinite;
+}
+
+.ay-typing i:nth-child(2) { animation-delay: .15s; }
+.ay-typing i:nth-child(3) { animation-delay: .3s; }
+
+@keyframes ay-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: .5; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* ---------- Форма ввода ---------- */
+
+.ay-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 14px 16px 10px;
+  border-top: 1px solid var(--border);
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, .25));
+}
+
+.ay-form textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  max-height: 170px;
+  background: rgba(0, 0, 0, .35);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  line-height: 1.45;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.ay-form textarea::placeholder { color: var(--text-muted); }
+
+.ay-form textarea:focus {
+  outline: none;
+  border-color: rgba(242, 183, 5, .6);
+  box-shadow: 0 0 0 3px rgba(242, 183, 5, .15);
+}
+
+.ay-send {
+  padding: 11px 20px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: .02em;
+  color: #14100a;
+  background: linear-gradient(135deg, var(--accent-soft), var(--accent) 60%, #e08b00);
+  box-shadow: 0 6px 18px rgba(242, 183, 5, .3);
+  transition: transform .15s ease, box-shadow .2s ease, filter .2s ease;
+}
+
+.ay-send:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow: 0 10px 24px rgba(242, 183, 5, .4);
+}
+
+.ay-send:active:not(:disabled) { transform: translateY(0) scale(.97); }
+
+.ay-send:disabled {
+  filter: grayscale(.7) brightness(.7);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.ay-stop {
+  padding: 11px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  color: var(--danger);
+  border: 1px solid rgba(255, 132, 113, .45);
+  background: rgba(255, 132, 113, .1);
+  transition: background .2s ease, transform .15s ease;
+}
+
+.ay-stop:hover { background: rgba(255, 132, 113, .2); }
+.ay-stop:active { transform: scale(.95); }
+
+.ay-status {
+  margin: 0;
+  padding: 0 18px 12px;
+  color: var(--accent-soft);
+  font-size: 13px;
+  min-height: 14px;
+}
+
+/* ---------- Настройки аватара ---------- */
+
+.ay-avatar-settings {
+  position: fixed;
+  z-index: 40;
+  right: 16px;
+  top: 16px;
+  width: min(330px, calc(100vw - 32px));
+  background: var(--surface);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid rgba(242, 183, 5, .3);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+  color: var(--text);
+}
+
+.ay-avatar-settings[hidden] { display: none; }
+
+.ay-avatar-settings:not([hidden]) {
+  animation: ay-panel-in .3s cubic-bezier(.2, .9, .3, 1.15) both;
+}
+
+.ay-avatar-settings header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ay-avatar-settings header strong {
+  font-size: 15px;
+  letter-spacing: .03em;
+  color: var(--accent-soft);
+}
+
+.ay-avatar-settings header button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  border-radius: 50%;
+  color: var(--text-muted);
+  transition: background .2s ease, color .2s ease;
+}
+
+.ay-avatar-settings header button:hover {
+  background: rgba(255, 255, 255, .08);
+  color: var(--text);
+}
+
+.ay-avatar-settings label {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 14px 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.ay-avatar-settings output {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-soft);
+  font-weight: 600;
+}
+
+.ay-avatar-settings input[type="range"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), rgba(255, 255, 255, .12));
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.ay-avatar-settings input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 3px solid #201a08;
+  box-shadow: 0 0 12px rgba(242, 183, 5, .6);
+  transition: transform .15s ease;
+}
+
+.ay-avatar-settings input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+
+.ay-avatar-settings input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 3px solid #201a08;
+  box-shadow: 0 0 12px rgba(242, 183, 5, .6);
+}
+
+.ay-avatar-settings .ay-avatar-upload {
+  display: block;
+  margin: 18px 0 8px;
+  padding: 13px;
+  border: 1px dashed rgba(242, 183, 5, .5);
+  border-radius: var(--radius-md);
+  background: var(--accent-dim);
+  color: var(--accent-soft);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: background .2s ease, border-color .2s ease, transform .15s ease;
+}
+
+.ay-avatar-settings .ay-avatar-upload:hover {
+  background: rgba(242, 183, 5, .22);
+  border-color: var(--accent);
+}
+
+.ay-avatar-settings .ay-avatar-upload:active { transform: scale(.98); }
+
+.ay-avatar-settings .ay-avatar-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.ay-avatar-settings .ay-avatar-upload:focus-within {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 3px;
+}
+
+.ay-avatar-upload-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  min-height: 1em;
+  margin: 6px 0 0;
+}
+
+.ay-avatar:focus-visible {
+  outline: 3px solid var(--accent-soft);
+  outline-offset: 4px;
+}
+
+/* ---------- Адаптивность ---------- */
+
+@media (max-width: 600px) {
+  .ay-chat {
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .ay-head { padding: 12px 14px; }
+  .ay-tagline { display: none; }
+  .ay-thread { padding: 16px 14px; }
+  .ay-msg { max-width: 92%; }
+  .ay-form { padding: 10px 12px 8px; }
+  .ay-avatar-settings {
+    top: calc(env(safe-area-inset-top, 12px) + 12px);
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+}
+
+/* ---------- Уважение к prefers-reduced-motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

@@ -1,2 +1,3 @@
-// Ресурс аватара: frontend/assets/avatar.png.
+// Изображение аватара встроено в main.ts как data-URI (SVG),
+// внешний файл frontend/assets/avatar.png не требуется.
 // Логика аватара подключена в main.ts без модульных импортов.

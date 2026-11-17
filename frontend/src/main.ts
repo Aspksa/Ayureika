@@ -8,30 +8,52 @@ const AVATAR_IMAGE = "ayureika:avatar:image:v1";
 const history: Message[] = (() => { try { const v = JSON.parse(localStorage.getItem(KEY) || "[]"); return Array.isArray(v) ? v.filter((m: Message) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string").slice(-100) : []; } catch { return []; } })();
 const avatar = document.createElement("button");
 avatar.className = "ay-avatar"; avatar.style.setProperty("--avatar-size", "64px"); avatar.type = "button"; avatar.title = "Открыть чат · перетащите для перемещения"; avatar.setAttribute("aria-label", "Открыть чат Ayureika");
-const img = document.createElement("img"); img.src = "/assets/avatar.png"; img.alt = ""; img.draggable = false;
+const img = document.createElement("img"); img.alt = ""; img.draggable = false;
+img.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='30%25' cy='25%25' r='90%25'%3E%3Cstop offset='0' stop-color='%232c2740'/%3E%3Cstop offset='1' stop-color='%2317141f'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='32' fill='url(%23g)'/%3E%3Ctext x='32' y='42' font-family='Segoe UI,Arial' font-size='28' font-weight='700' text-anchor='middle' fill='%23ffd369'%3EA%3C/text%3E%3C/svg%3E";
 const fallback = document.createElement("span"); fallback.textContent = "А"; fallback.className = "ay-fallback";
 img.onload = () => { fallback.hidden = true; }; img.onerror = () => { fallback.hidden = false; img.hidden = true; };
 try { const savedImage = localStorage.getItem(AVATAR_IMAGE); if (savedImage && /^data:image\/(png|jpeg|webp);base64,/.test(savedImage)) img.src = savedImage; } catch { /* storage unavailable */ }
 avatar.append(fallback, img);
 const panel = document.createElement("section"); panel.className = "ay-chat"; panel.hidden = true; panel.setAttribute("aria-label", "Чат Ayureika");
 const head = document.createElement("header"); head.className = "ay-head";
+const brand = document.createElement("span"); brand.className = "ay-brand";
 const title = document.createElement("strong"); title.textContent = "Ayureika";
+const tagline = document.createElement("span"); tagline.className = "ay-tagline"; tagline.textContent = "ваш персональный ассистент";
+brand.append(title, tagline);
 const clear = document.createElement("button"); clear.type = "button"; clear.textContent = "Новый чат"; clear.title = "Очистить историю";
-const close = document.createElement("button"); close.type = "button"; close.textContent = "×"; close.title = "Закрыть чат";
-head.append(title, clear, close);
+const close = document.createElement("button"); close.type = "button"; close.textContent = "×"; close.title = "Закрыть чат"; close.className = "ay-close";
+head.append(brand, clear, close);
 const thread = document.createElement("div"); thread.className = "ay-thread"; thread.setAttribute("role", "log"); thread.setAttribute("aria-live", "polite");
 const form = document.createElement("form"); form.className = "ay-form";
-const input = document.createElement("textarea"); input.rows = 2; input.placeholder = "Сообщение…"; input.setAttribute("aria-label", "Сообщение");
-const send = document.createElement("button"); send.type = "submit"; send.textContent = "Отправить";
-const stop = document.createElement("button"); stop.type = "button"; stop.textContent = "Стоп"; stop.hidden = true;
+const input = document.createElement("textarea"); input.rows = 2; input.placeholder = "Напишите сообщение…"; input.setAttribute("aria-label", "Сообщение");
+const send = document.createElement("button"); send.type = "submit"; send.textContent = "Отправить"; send.className = "ay-send";
+const stop = document.createElement("button"); stop.type = "button"; stop.textContent = "Стоп"; stop.hidden = true; stop.className = "ay-stop";
 const status = document.createElement("p"); status.className = "ay-status"; status.setAttribute("role", "status");
 form.append(input, send, stop); panel.append(head, thread, form, status); document.body.append(avatar, panel);
 function save() { try { localStorage.setItem(KEY, JSON.stringify(history.slice(-100))); } catch { /* private browsing */ } }
 function paint() {
   thread.replaceChildren();
+  if (history.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "ay-empty";
+    empty.textContent = "Начните диалог — напишите сообщение ниже.\nАватар можно перетаскивать, правый клик — настройки.";
+    thread.append(empty);
+    return;
+  }
   for (const m of history) { const item = document.createElement("div"); item.className = "ay-msg " + m.role; item.textContent = m.content; thread.append(item); }
   thread.scrollTop = thread.scrollHeight;
 }
+let typing: HTMLElement | null = null;
+function showTyping() {
+  hideTyping();
+  typing = document.createElement("div");
+  typing.className = "ay-typing";
+  typing.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 3; i++) typing.append(document.createElement("i"));
+  thread.append(typing);
+  thread.scrollTop = thread.scrollHeight;
+}
+function hideTyping() { typing?.remove(); typing = null; }
 paint();
 function openChat() { panel.hidden = false; avatar.setAttribute("aria-expanded", "true"); input.focus(); }
 function closeChat() { panel.hidden = true; avatar.setAttribute("aria-expanded", "false"); avatar.focus(); }
@@ -44,14 +66,15 @@ form.onsubmit = async (event) => {
   event.preventDefault();
   const message = input.value.trim(); if (!message || active) return;
   history.push({ role: "user", content: message }); save(); paint(); input.value = "";
-  active = new AbortController(); send.disabled = true; stop.hidden = false; status.textContent = "Ожидание ответа…";
+  active = new AbortController(); send.disabled = true; stop.hidden = false; status.textContent = ""; showTyping();
   try {
     const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message, history: history.slice(-20) }), signal: active.signal });
+    hideTyping();
     const data: unknown = await response.json();
     const result = data as { reply?: unknown; error?: unknown };
     if (!response.ok || typeof result.reply !== "string") throw new Error(typeof result.error === "string" ? result.error : "Сервер чата пока не подключён");
     history.push({ role: "assistant", content: result.reply }); save(); paint(); status.textContent = "";
-  } catch (error) { status.textContent = error instanceof Error && error.name === "AbortError" ? "Запрос остановлен" : (error instanceof Error ? error.message : "Ошибка подключения"); }
+  } catch (error) { hideTyping(); status.textContent = error instanceof Error && error.name === "AbortError" ? "Запрос остановлен" : (error instanceof Error ? error.message : "Ошибка подключения"); }
   finally { active = null; send.disabled = false; stop.hidden = true; input.focus(); }
 };
 input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); } });
