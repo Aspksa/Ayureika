@@ -24,7 +24,7 @@ const img = document.createElement("img"); img.src = "/assets/avatar.png"; img.a
 const fallback = document.createElement("span"); fallback.className = "ay-fallback"; fallback.textContent = "А";
 img.onload = () => { fallback.hidden = true; img.hidden = false; };
 img.onerror = () => { fallback.hidden = false; img.hidden = true; };
-try { const savedImage = localStorage.getItem(AVATAR_IMAGE); if (savedImage && /^data:image\\/(png|jpeg|webp);base64,/.test(savedImage)) img.src = savedImage; } catch {}
+try { const savedImage = localStorage.getItem(AVATAR_IMAGE); if (savedImage && /^data:image\/(png|jpeg|webp);base64,/.test(savedImage)) img.src = savedImage; } catch {}
 const busyBadge = document.createElement("span"); busyBadge.className = "ay-busy"; busyBadge.hidden = true; busyBadge.title = "ИИ обрабатывает запрос";
 avatar.append(fallback,img,busyBadge);
 const panel = document.createElement("section"); panel.className = "ay-chat"; panel.hidden = true; panel.setAttribute("aria-label","Чат Ayureika");
