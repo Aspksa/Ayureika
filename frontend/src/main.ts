@@ -116,7 +116,7 @@ form.onsubmit = async e => {
       }
       if(buffer && type.includes("text/plain"))reply.content+=buffer;
       if(!reply.content)target.messages.pop();
-    } else { const data=await response.json() as {reply?:string;error?:string};if(typeof data.reply!=="string")throw new Error(data.error||"Нет ответа");target.messages.push({role:"assistant",content:data.reply}); }
+    } else { const data=await response.json() as {reply?:string;error?:string;confirmation?:{id:string;name:string;input:string}};if(data.confirmation){const t=data.confirmation;const approved=confirm("Модель запрашивает инструмент «"+t.name+"» с аргументом «"+t.input+"». Разрешить?");const check=await fetch("/api/tools/approve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:t.id,approve:approved}),signal:controller.signal});const outcome=await check.json() as {reply?:string;error?:string};if(!check.ok)throw Error(outcome.error||"Ошибка инструмента");data.reply=outcome.reply;}if(typeof data.reply!=="string")throw new Error(data.error||"Нет ответа");target.messages.push({role:"assistant",content:data.reply}); }
     persist();if(current===target.id)paint();status.textContent="";
   } catch(error) { status.textContent=error instanceof Error && error.name==="AbortError"?"Запрос остановлен":error instanceof Error?error.message:"Ошибка подключения";persist(); }
   finally {active=null;avatar.classList.remove("busy");busyBadge.hidden=true;send.disabled=false;stop.hidden=true;input.focus();}
@@ -193,8 +193,8 @@ function settingsRow(label:string,detail:string):HTMLElement{
 }
 const settingsCards=new Map<string,HTMLElement>();
 
-type RemoteSettings={endpoint:string;model:string;fallbackModel:string;instructions:string;memoryEnabled:boolean;toolsEnabled:boolean;quickCommands:{name:string;text:string}[];keyConfigured:boolean};
-let remoteSettings:RemoteSettings={endpoint:"",model:"",fallbackModel:"",instructions:"",memoryEnabled:true,toolsEnabled:false,quickCommands:[],keyConfigured:false};
+type RemoteSettings={endpoint:string;model:string;fallbackModel:string;instructions:string;memoryEnabled:boolean;toolsEnabled:boolean;quickCommands:{name:string;text:string}[];embeddingModel:string;keyConfigured:boolean};
+let remoteSettings:RemoteSettings={endpoint:"",model:"",fallbackModel:"",instructions:"",memoryEnabled:true,toolsEnabled:false,quickCommands:[],embeddingModel:"",keyConfigured:false};
 const uiKey="ayureika:settings:ui:v1";
 type UiPrefs={theme:string;accent:string;radius:string;scale:string;font:string;density:string};
 let ui:UiPrefs={theme:"dark",accent:"#caa65b",radius:"16",scale:"100",font:"14",density:"normal"};
@@ -262,7 +262,11 @@ function addSettingsCard(sec:SettingsSection){
   body.append(field,save,status);
  }else if(sec.id==="memory"){
   body.append(toggleSetting("Использовать память и историю как контекст",remoteSettings.memoryEnabled,v=>saveRemote({memoryEnabled:v})));
-  const note=document.createElement("small");note.textContent="SQLite: записи с защитой от дубликатов. Поиск по тексту; векторный поиск пока не подключён.";
+  body.append(textField("Модель Cloud.ru embeddings",remoteSettings.embeddingModel||"",v=>saveRemote({embeddingModel:v})));
+  const reindex=button("Индексировать память");const indexing=document.createElement("small");
+  reindex.onclick=async()=>{reindex.disabled=true;indexing.textContent="Индексация…";try{const r=await fetch("/api/memory/reindex",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});const d=await r.json() as {indexed?:number;remaining?:boolean;error?:string};indexing.textContent=r.ok?"Проиндексировано: "+d.indexed+(d.remaining?" · Есть ещё записи":" · Готово"):d.error||"Ошибка";}catch(e){indexing.textContent=String(e);}finally{reindex.disabled=false;}};
+  body.append(reindex,indexing);
+  const note=document.createElement("small");note.textContent="SQLite: защита от дубликатов, смысловой поиск через embeddings при заданной модели; без неё поиск по словам.";
   const input=document.createElement("textarea");input.rows=3;input.placeholder="Запись, которую Ayureika должна помнить";
   const save=button("Запомнить");const searchInput=document.createElement("input");searchInput.placeholder="Поиск по памяти";
   const searchButton=button("Найти");const list=document.createElement("div");list.className="ay-settings-model-list";const status=document.createElement("small");
@@ -274,7 +278,7 @@ function addSettingsCard(sec:SettingsSection){
   body.append(note,input,save,searchInput,searchButton,all,list,status);void render();
  }else if(sec.id==="tools"){
   body.append(toggleSetting("Разрешить инструменты",remoteSettings.toolsEnabled,v=>saveRemote({toolsEnabled:v})));
-  body.append(settingsRow("Безопасные инструменты","Калькулятор, часы и поиск в памяти. Каждый запуск требует подтверждения. Модель пока не вызывает инструменты самостоятельно."));
+  body.append(settingsRow("Безопасные инструменты","Калькулятор, часы и поиск в памяти. Модель может запросить инструмент в чате, но запуск происходит только после подтверждения."));
   const select=document.createElement("select");for(const [v,label] of [["calculator","Калькулятор"],["clock","Текущее время UTC"],["memory_search","Поиск в памяти"]]){const opt=document.createElement("option");opt.value=v;opt.textContent=label;select.append(opt);}
   const input=document.createElement("input");input.placeholder="Выражение или поисковый запрос";const run=button("Выполнить");const result=document.createElement("pre");const audit=button("Журнал операций");
   run.onclick=async()=>{if(!confirm("Разрешить выполнение инструмента «"+select.value+"»?"))return;try{const r=await fetch("/api/tools/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:select.value,input:input.value,confirm:true})});const d=await r.json() as {output?:string;error?:string};result.textContent=d.output||d.error||"Нет ответа";}catch(e){result.textContent=String(e);}};
