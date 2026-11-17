@@ -16,6 +16,19 @@ const logsStmt=db.prepare("SELECT id,name,input,output,created_at FROM tool_audi
 function normalize(value){if(typeof value!=="string")throw Error("Ожидается текст");const text=value.trim();if(!text||text.length>4000)throw Error("Текст должен содержать от 1 до 4000 символов");return text;}
 function remember(value){const content=normalize(value);const id=crypto.createHash("sha256").update(content.toLocaleLowerCase("ru")).digest("hex");insert.run(id,content);return {id,content};}
 function search(query,limit=10){const q=normalize(query).replace(/[\\%_]/g,"\\$&");return searchStmt.all("%"+q+"%",Math.min(30,Math.max(1,Number(limit)||10)));}
+function relevant(query,limit=5){
+ const words=[...new Set(normalize(query).toLocaleLowerCase("ru").match(/[\\p{L}\\p{N}]{3,}/gu)||[])].slice(0,12);
+ if(!words.length)return [];
+ const candidates=listStmt.all(100);
+ return candidates.map(row=>{const hay=row.content.toLocaleLowerCase("ru");const score=words.reduce((n,w)=>n+(hay.includes(w)?1:0),0);return {...row,score};})
+ .filter(row=>row.score>0).sort((a,b)=>b.score-a.score||b.created_at.localeCompare(a.created_at)).slice(0,Math.min(10,Math.max(1,limit)));
+}
+function extractExplicit(message){
+ if(typeof message!=="string")return null;
+ const match=message.trim().match(/^(?:запомни(?:\\s+что)?|remember)\\s*[:：]?\\s+([\\s\\S]{1,4000})$/iu);
+ return match?match[1].trim():null;
+}
+function count(){return db.prepare("SELECT COUNT(*) AS total FROM memories").get().total;}
 function list(){return listStmt.all(100);}
 function forget(id){if(typeof id!=="string"||!/^[a-f0-9]{64}$/.test(id))throw Error("Некорректный идентификатор");return deleteStmt.run(id).changes>0;}
 function execute(name,input,approved){if(!approved)throw Error("Требуется подтверждение пользователя");if(!["calculator","memory_search","clock"].includes(name))throw Error("Инструмент не разрешён");
@@ -28,4 +41,4 @@ function term(){let v=factor();while(["*","/","%"].includes(tokens[i])){const op
 function sum(){let v=term();while(["+","-"].includes(tokens[i])){const op=tokens[i++];v=op==="+"?v+term():v-term();}return v;}
 const value=sum();if(i!==tokens.length||!Number.isFinite(value))throw Error("Некорректное вычисление");output=String(value);}
 auditStmt.run(name,String(input).slice(0,500),String(output).slice(0,4000));return {name,output};}
-module.exports={remember,search,list,forget,execute,logs:()=>logsStmt.all()};
+module.exports={remember,search,relevant,extractExplicit,count,list,forget,execute,logs:()=>logsStmt.all()};
