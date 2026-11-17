@@ -31,6 +31,17 @@ async function run(){
  await evaluate("document.querySelector('.ay-head button[title=\"Настройки Ayureika\"]').click()");
  await waitFor(()=>evaluate("document.querySelector('.ay-settings-page').hidden===false"));
  assert.ok(await evaluate("document.querySelectorAll('.ay-settings-link').length>=5"));
+ assert.equal(await evaluate("document.querySelectorAll('.ay-settings-card:not([hidden])').length"),1);
+ assert.equal(await evaluate("document.querySelectorAll('.ay-settings-card:not([hidden]) .ay-settings-card-body').length"),1);
+ await evaluate("document.querySelector('.ay-settings-link[data-section=\\\"chat\\\"]').click()");
+ assert.equal(await evaluate("document.querySelector('.ay-settings-card:not([hidden])').id"),"ay-settings-chat");
+ assert.equal(await evaluate("document.querySelectorAll('.ay-settings-card:not([hidden])').length"),1);
+ assert.equal(await evaluate("document.querySelectorAll('.ay-settings-card:not([hidden]) select').length"),2);
+ await evaluate("document.querySelector('.ay-settings-link[data-section=\\\"look\\\"]').click()");
+ assert.equal(await evaluate("document.querySelector('.ay-settings-card:not([hidden])').id"),"ay-settings-look");
+ await evaluate("document.querySelector('.ay-settings-nav input').value='память';document.querySelector('.ay-settings-nav input').dispatchEvent(new Event('input',{bubbles:true}))");
+ assert.ok(await evaluate("document.querySelectorAll('.ay-settings-link:not([hidden])').length>=1"));
+
  await cmd("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
  assert.ok(await evaluate("document.querySelector('.ay-settings-layout').getBoundingClientRect().width<=390"));
  assert.ok(await evaluate("getComputedStyle(document.querySelector('.ay-settings-layout')).gridTemplateColumns.split(' ').length===1"));

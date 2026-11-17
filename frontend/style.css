@@ -138,3 +138,9 @@ html[data-ay-theme="light"] .ay-settings-card-head{color:#30291c}
 .ay-memory-sources summary{cursor:pointer;color:#f2d493}
 .ay-memory-sources p{margin:6px 0;overflow-wrap:anywhere}
 @media(max-width:639px){.ay-memory-sources{max-height:120px;font-size:11px}}
+
+/* One active settings page; hidden cards never take layout space. */
+.ay-settings-card[hidden],.ay-settings-link[hidden],.ay-settings-card-body[hidden]{display:none!important}
+.ay-settings-content{overflow-y:auto;min-height:0}
+.ay-settings-link[aria-current="page"]{background:#302617;border-color:#bd9952;color:#f6d795}
+@media(max-width:760px){.ay-settings-content{min-height:0;overflow-y:auto}}
